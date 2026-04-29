@@ -4,7 +4,7 @@ use crate::{
         GrepFileParams, LsDirParams, LsDirResult, PromptDoit, PromptSecAudit, ReadFileParams,
     },
 };
-use anyhow::{self as ah, format_err as err};
+use anyhow::{self as ah, Context as _, format_err as err};
 use rmcp::{
     RoleServer, ServerHandler,
     handler::server::{
@@ -20,10 +20,17 @@ use rmcp::{
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 const READ_FILE_MAX_SIZE: u64 = 256 * 1024;
+const MAX_DIR_ENTRIES: usize = 16 * 1024;
+
+async fn canonicalize(path: &Path) -> ah::Result<PathBuf> {
+    fs::canonicalize(path)
+        .await
+        .with_context(|| format!("Failed to canonicalize path `{}`", path.display()))
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ProgLanguage {
@@ -45,19 +52,12 @@ pub struct CodepalServer {
 
 impl CodepalServer {
     pub async fn new(opts: &Opts) -> ah::Result<Self> {
-        let workspace = fs::canonicalize(&opts.workspace).await.map_err(|e| {
-            err!(
-                "Failed to canonicalize workspace path `{}`: {e}",
-                opts.workspace.display()
-            )
-        })?;
+        let workspace = canonicalize(&opts.workspace).await?;
 
         let mut read_path_allow_list = Vec::with_capacity(opts.read_path_allow_list.len() + 1);
         read_path_allow_list.push(workspace.clone());
         for p in &opts.read_path_allow_list {
-            let canon = fs::canonicalize(&p)
-                .await
-                .map_err(|e| err!("Failed to canonicalize path `{}`: {e}", p.display()))?;
+            let canon = canonicalize(p).await?;
             read_path_allow_list.push(canon);
         }
 
@@ -74,7 +74,7 @@ impl CodepalServer {
                     let p = home.join(dir);
                     if p.is_dir() {
                         eprintln!("Auto-allowing Rust read-path: {}", p.display());
-                        read_path_allow_list.push(p);
+                        read_path_allow_list.push(canonicalize(&p).await?);
                     }
                 }
             }
@@ -98,9 +98,9 @@ impl CodepalServer {
     }
 
     async fn path_check_allowed(&self, path: PathBuf) -> ah::Result<PathBuf> {
-        let path = fs::canonicalize(&path).await.map_err(|_| {
-            rmcp::ErrorData::invalid_params(format!("`{}`: EINVAL", path.display()), None)
-        })?;
+        let path = canonicalize(&path)
+            .await
+            .map_err(|_| err!("`{}`: EINVAL", path.display()))?;
         if self
             .read_path_allow_list
             .iter()
@@ -108,7 +108,7 @@ impl CodepalServer {
         {
             Ok(path)
         } else {
-            Err(err!("`{}`: EPERM", path.display()))
+            Err(err!("EPERM"))
         }
     }
 }
@@ -166,16 +166,24 @@ impl CodepalServer {
             rmcp::ErrorData::invalid_params(format!("`{}`: EPERM", path.display()), None)
         })?;
 
-        let mut entries = vec![];
+        let mut entries = Vec::with_capacity(256);
+        let mut truncated = false;
         while let Some(entry) = read_dir.next_entry().await.map_err(|_| {
             rmcp::ErrorData::invalid_params(format!("`{}`: EPERM", path.display()), None)
         })? {
+            if entries.len() >= MAX_DIR_ENTRIES {
+                truncated = true;
+                break;
+            }
             if let Ok(file_type) = entry.file_type().await {
                 let suffix = if file_type.is_dir() { "/" } else { "" };
                 entries.push(format!("{}{suffix}", entry.file_name().to_string_lossy()));
             }
         }
         entries.sort();
+        if truncated {
+            entries.push("... more than maximum number of entries ...".to_string());
+        }
 
         Ok(Json(LsDirResult { entries }))
     }
@@ -225,13 +233,15 @@ impl CodepalServer {
             0
         };
         let end: usize = if let Some(end_line) = end_line {
-            let end: usize = end_line
+            end_line
                 .try_into()
-                .map_err(|_| rmcp::ErrorData::invalid_params("Invalid line number end", None))?;
-            end.min(lines.len())
+                .map_err(|_| rmcp::ErrorData::invalid_params("Invalid line number end", None))?
         } else {
             lines.len()
         };
+
+        let end = end.min(lines.len());
+        let start = start.min(end);
 
         Ok(lines[start..end].join("\n"))
     }
@@ -358,7 +368,6 @@ impl ServerHandler for CodepalServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     async fn make_server(workspace: &Path) -> CodepalServer {
         let opts = Opts {
