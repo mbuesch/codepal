@@ -1,4 +1,6 @@
-use crate::mcp_struct::{GrepFileParams, LsDirParams, LsDirResult, PromptDoit, ReadFileParams};
+use crate::mcp_struct::{
+    GrepFileParams, LsDirParams, LsDirResult, PromptDoit, PromptSecAudit, ReadFileParams,
+};
 use anyhow::{self as ah, format_err as err};
 use rmcp::{
     RoleServer, ServerHandler,
@@ -82,17 +84,29 @@ impl CodepalServer {
     }
 }
 
+const PROMPT_PREFIX: &str = include_str!("mcp_prompt_prefix.md");
+const PROMPT_SECAUDIT: &str = include_str!("mcp_prompt_secaudit.md");
+
 #[prompt_router]
 impl CodepalServer {
     /// Prompt with CodePal instructions.
     #[prompt]
     pub async fn doit(&self, params: Parameters<PromptDoit>) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(
-                PromptMessageRole::Assistant,
-                "You **MUST ALWAYS** read + adhere to `codepal` MCP instructions.",
-            ),
+            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
             PromptMessage::new_text(PromptMessageRole::User, params.0.instructions),
+        ]
+    }
+
+    /// Prompt to perform a security audit.
+    #[prompt]
+    pub async fn security_audit(&self, params: Parameters<PromptSecAudit>) -> Vec<PromptMessage> {
+        vec![
+            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!("{PROMPT_SECAUDIT}\n{}", params.0.what),
+            ),
         ]
     }
 }

@@ -8,6 +8,12 @@ pub struct PromptDoit {
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptSecAudit {
+    #[schemars(description = "What to perform the security audit on")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub struct LsDirParams {
     #[schemars(description = "Path of directory to list")]
     pub path: String,
