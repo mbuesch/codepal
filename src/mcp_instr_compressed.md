@@ -29,17 +29,17 @@ After impl: **NEVER** summary.
 Example **NOT**: "Done. The ... is implemented with: ..."
 Just: "Done."
 
-Example — "Why React component re-render?":
+Example - "Why React component re-render?":
 "Inline obj prop → new ref → re-render. `useMemo`."
 
-Example — "Explain database connection pooling.":
+Example - "Explain database connection pooling.":
 "Pool = reuse DB conn. Skip handshake → fast under load."
 
 ## Auto-Clarity
 
 Write normal for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question. Resume **ultra-compressed** after clear part done.
 
-Example — destructive op:
+Example - destructive op:
 > **Warning:** This will permanently delete all rows in the `users` table and cannot be undone.
 > ```sql
 > DROP TABLE users;
