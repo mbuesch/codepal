@@ -1,5 +1,8 @@
-use crate::mcp_struct::{
-    GrepFileParams, LsDirParams, LsDirResult, PromptDoit, PromptSecAudit, ReadFileParams,
+use crate::{
+    Opts,
+    mcp_struct::{
+        GrepFileParams, LsDirParams, LsDirResult, PromptDoit, PromptSecAudit, ReadFileParams,
+    },
 };
 use anyhow::{self as ah, format_err as err};
 use rmcp::{
@@ -17,10 +20,16 @@ use rmcp::{
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs;
 
 const READ_FILE_MAX_SIZE: u64 = 256 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum ProgLanguage {
+    Unknown,
+    Rust,
+}
 
 #[derive(Clone, Debug)]
 pub struct CodepalServer {
@@ -28,41 +37,61 @@ pub struct CodepalServer {
     workspace: PathBuf,
     read_path_allow_list: Vec<PathBuf>,
     enable_compressed: bool,
+    #[allow(dead_code)]
+    prog_lang: ProgLanguage,
     prompt_router: PromptRouter<Self>,
     tool_router: ToolRouter<Self>,
 }
 
 impl CodepalServer {
-    pub async fn new(
-        workspace: &Path,
-        read_path_allow_list: &[PathBuf],
-        enable_compressed: bool,
-    ) -> ah::Result<Self> {
-        let workspace = fs::canonicalize(workspace).await.map_err(|e| {
+    pub async fn new(opts: &Opts) -> ah::Result<Self> {
+        let workspace = fs::canonicalize(&opts.workspace).await.map_err(|e| {
             err!(
                 "Failed to canonicalize workspace path `{}`: {e}",
-                workspace.display()
+                opts.workspace.display()
             )
         })?;
 
-        let mut canon_read_path_allow_list = Vec::with_capacity(read_path_allow_list.len() + 1);
-        canon_read_path_allow_list.push(workspace.clone());
-        for p in read_path_allow_list {
+        let mut read_path_allow_list = Vec::with_capacity(opts.read_path_allow_list.len() + 1);
+        read_path_allow_list.push(workspace.clone());
+        for p in &opts.read_path_allow_list {
             let canon = fs::canonicalize(&p)
                 .await
                 .map_err(|e| err!("Failed to canonicalize path `{}`: {e}", p.display()))?;
-            canon_read_path_allow_list.push(canon);
+            read_path_allow_list.push(canon);
         }
-        if !canon_read_path_allow_list.is_empty() {
+
+        // Project programming language detection: Rust
+        let mut prog_lang = ProgLanguage::Unknown;
+        if workspace.join("Cargo.toml").exists() {
+            eprintln!("Detected Rust project.");
+            prog_lang = ProgLanguage::Rust;
+            if !opts.no_auto_path_allow
+                && let Ok(home) = std::env::var("HOME")
+            {
+                let home = PathBuf::from(home);
+                for dir in [".cargo", ".rustup"] {
+                    let p = home.join(dir);
+                    if p.is_dir() {
+                        eprintln!("Auto-allowing Rust read-path: {}", p.display());
+                        read_path_allow_list.push(p);
+                    }
+                }
+            }
+        }
+
+        if !read_path_allow_list.is_empty() {
             eprintln!("File read path allowlist:");
-            for p in &canon_read_path_allow_list {
+            for p in &read_path_allow_list {
                 eprintln!(" - {}", p.display());
             }
         }
+
         Ok(Self {
             workspace,
-            read_path_allow_list: canon_read_path_allow_list,
-            enable_compressed,
+            read_path_allow_list,
+            enable_compressed: opts.enable_compressed,
+            prog_lang,
             prompt_router: Self::prompt_router(),
             tool_router: Self::tool_router(),
         })
@@ -329,9 +358,16 @@ impl ServerHandler for CodepalServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     async fn make_server(workspace: &Path) -> CodepalServer {
-        CodepalServer::new(workspace, &[], false)
+        let opts = Opts {
+            workspace: workspace.to_path_buf(),
+            read_path_allow_list: vec![],
+            no_auto_path_allow: false,
+            enable_compressed: false,
+        };
+        CodepalServer::new(&opts)
             .await
             .expect("server creation failed")
     }
