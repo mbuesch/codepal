@@ -35,16 +35,7 @@ Example - "Why React component re-render?":
 Example - "Explain database connection pooling.":
 "Pool = reuse DB conn. Skip handshake → fast under load."
 
-## Auto-Clarity
-
-Write normal for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question. Resume **ultra-compressed** after clear part done.
-
-Example - destructive op:
-> **Warning:** This will permanently delete all rows in the `users` table and cannot be undone.
-> ```sql
-> DROP TABLE users;
-> ```
-> **ultra-compressed** resume. Verify backup exist first.
+MUST USE **ultra-compressed** for thinking + sub agents.
 
 ## Boundaries
 

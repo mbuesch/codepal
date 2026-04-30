@@ -3,8 +3,8 @@
 
 basedir="$(realpath "$0" | xargs dirname)"
 
-[ -f "$basedir/Cargo.toml" ] || die "basedir sanity check failed"
 . "$basedir/scripts/lib.sh"
+[ -f "$basedir/Cargo.toml" ] || die "basedir sanity check failed"
 
 release="both"
 while [ $# -ge 1 ]; do

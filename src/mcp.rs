@@ -34,8 +34,8 @@ const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 
 fn create_memory_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS values (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
-         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES values(id));",
+        "CREATE TABLE IF NOT EXISTS mem_values (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
+         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES mem_values(id));",
     )
 }
 
@@ -123,7 +123,7 @@ impl CodepalServer {
         create_memory_tables(&conn).context("Failed to ensure memory schema")?;
         let mut stmt = conn
             .prepare(
-                "SELECT m.key, v.value FROM memory m JOIN values v ON m.value_id = v.id ORDER BY m.key",
+                "SELECT m.key, v.value FROM memory m JOIN mem_values v ON m.value_id = v.id ORDER BY m.key",
             )
             .context("Failed to prepare query")?;
         let mut rows = stmt.query([]).context("Failed to query memory")?;
@@ -406,13 +406,13 @@ impl CodepalServer {
         let conn = guard.as_mut().unwrap();
         // Insert the value once; get its id.
         conn.execute(
-            "INSERT OR IGNORE INTO values (value) VALUES (?1)",
+            "INSERT OR IGNORE INTO mem_values (value) VALUES (?1)",
             sql::params![value],
         )
         .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         let value_id: i64 = conn
             .query_row(
-                "SELECT id FROM values WHERE value = ?1",
+                "SELECT id FROM mem_values WHERE value = ?1",
                 sql::params![value],
                 |row| row.get(0),
             )
@@ -460,10 +460,14 @@ impl CodepalServer {
         let conn = guard.as_mut().unwrap();
         let mut value = None;
         for key in &keys {
+            let escaped = key
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
             value = conn
                 .query_row(
-                    "SELECT v.value FROM memory m JOIN values v ON m.value_id = v.id WHERE m.key = ?1",
-                    sql::params![key],
+                    "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\'",
+                    sql::params![escaped],
                     |row| row.get(0),
                 )
                 .optional()
