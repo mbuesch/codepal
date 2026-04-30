@@ -48,3 +48,29 @@ pub struct GrepFileParams {
     #[schemars(description = "Optional: Context lines, like grep -C (default: 0)")]
     pub context_lines: Option<u16>,
 }
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryStoreParams {
+    #[schemars(description = "Keys to store the value under (all keys map to the same value)")]
+    pub keys: Vec<String>,
+    #[schemars(description = "Value to store")]
+    pub value: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryStoreResult {
+    #[schemars(description = "Whether the value was stored successfully")]
+    pub success: bool,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryLoadParams {
+    #[schemars(description = "Keys to look up; first key found in the store is returned")]
+    pub keys: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryLoadResult {
+    #[schemars(description = "The stored value, or null if not found")]
+    pub value: Option<String>,
+}

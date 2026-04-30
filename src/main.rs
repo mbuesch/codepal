@@ -11,20 +11,24 @@ mod mcp_struct;
 pub struct Opts {
     /// Path to the project workspace root.
     #[arg(long, short = 'w', value_name = "PATH")]
-    workspace: PathBuf,
+    pub workspace: PathBuf,
 
     /// Allowed path prefixes. Only files under these paths may be read.
     /// May be specified multiple times.
     #[arg(long = "allow-read", short = 'r', value_name = "PATH")]
-    read_path_allow_list: Vec<PathBuf>,
+    pub read_path_allow_list: Vec<PathBuf>,
 
     /// Disable automatic language-specific path additions (e.g. ~/.cargo, ~/.rustup for Rust).
     #[arg(long)]
-    no_auto_path_allow: bool,
+    pub no_auto_path_allow: bool,
 
     /// Enable compressed communication.
     #[arg(long, short = 'C')]
-    enable_compressed: bool,
+    pub enable_compressed: bool,
+
+    /// Dump memory store contents to stdout and exit.
+    #[arg(long)]
+    pub dump_memory: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -33,6 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = mcp::CodepalServer::new(&opts)
         .await
         .context("Start MCP server")?;
+    if opts.dump_memory {
+        server.dump_memory().await?;
+        return Ok(());
+    }
     let service = server.serve(stdio()).await?;
     service.waiting().await?;
     Ok(())

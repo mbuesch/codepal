@@ -2,7 +2,7 @@
   "servers": {
     "codepal": {
       "type": "stdio",
-      "command": "/home/mb/develop/git/codepal/target/debug/codepal",
+      "command": "${workspaceFolder}/target/debug/codepal",
       "args": [
         "--workspace", "${workspaceFolder}",
         "--enable-compressed",

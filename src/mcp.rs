@@ -1,7 +1,8 @@
 use crate::{
     Opts,
     mcp_struct::{
-        GrepFileParams, LsDirParams, LsDirResult, PromptDoit, PromptSecAudit, ReadFileParams,
+        GrepFileParams, LsDirParams, LsDirResult, MemoryLoadParams, MemoryLoadResult,
+        MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptSecAudit, ReadFileParams,
     },
 };
 use anyhow::{self as ah, Context as _, format_err as err};
@@ -20,11 +21,23 @@ use rmcp::{
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
-use std::path::{Path, PathBuf};
+use rusqlite::{self as sql, OptionalExtension as _};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 use tokio::fs;
 
 const READ_FILE_MAX_SIZE: u64 = 256 * 1024;
 const MAX_DIR_ENTRIES: usize = 16 * 1024;
+const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
+
+fn create_memory_tables(conn: &sql::Connection) -> sql::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS values (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
+         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES values(id));",
+    )
+}
 
 async fn canonicalize(path: &Path) -> ah::Result<PathBuf> {
     fs::canonicalize(path)
@@ -45,6 +58,8 @@ pub struct CodepalServer {
     read_path_allow_list: Vec<PathBuf>,
     enable_compressed: bool,
     prog_lang: ProgLanguage,
+    memory_db_path: PathBuf,
+    memory_db_conn: Arc<Mutex<Option<sql::Connection>>>,
     prompt_router: PromptRouter<Self>,
     tool_router: ToolRouter<Self>,
 }
@@ -87,13 +102,42 @@ impl CodepalServer {
         }
 
         Ok(Self {
-            workspace,
+            workspace: workspace.clone(),
             read_path_allow_list,
             enable_compressed: opts.enable_compressed,
             prog_lang,
+            memory_db_path: workspace.join(MEMORY_DB_FILENAME),
+            memory_db_conn: Arc::new(Mutex::new(None)),
             prompt_router: Self::prompt_router(),
             tool_router: Self::tool_router(),
         })
+    }
+
+    pub async fn dump_memory(&self) -> ah::Result<()> {
+        if !self.memory_db_path.exists() {
+            println!("(memory store is empty)");
+            return Ok(());
+        }
+        let conn = sql::Connection::open(&self.memory_db_path)
+            .with_context(|| format!("Failed to open `{}`", self.memory_db_path.display()))?;
+        create_memory_tables(&conn).context("Failed to ensure memory schema")?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.key, v.value FROM memory m JOIN values v ON m.value_id = v.id ORDER BY m.key",
+            )
+            .context("Failed to prepare query")?;
+        let mut rows = stmt.query([]).context("Failed to query memory")?;
+        let mut found = false;
+        while let Some(row) = rows.next().context("Failed to read row")? {
+            let key: String = row.get(0).context("Failed to read key")?;
+            let value: String = row.get(1).context("Failed to read value")?;
+            println!("{key}\t{value}");
+            found = true;
+        }
+        if !found {
+            println!("(memory store is empty)");
+        }
+        Ok(())
     }
 
     async fn path_check_allowed(&self, path: PathBuf) -> ah::Result<PathBuf> {
@@ -338,6 +382,98 @@ impl CodepalServer {
 
         Ok(result)
     }
+
+    /// Store a value in the key-value memory store
+    #[tool]
+    pub async fn memory_store(
+        &self,
+        Parameters(MemoryStoreParams { keys, value }): Parameters<MemoryStoreParams>,
+    ) -> Result<Json<MemoryStoreResult>, rmcp::ErrorData> {
+        if keys.is_empty() {
+            return Err(rmcp::ErrorData::invalid_params(
+                "keys must not be empty",
+                None,
+            ));
+        }
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        // Insert the value once; get its id.
+        conn.execute(
+            "INSERT OR IGNORE INTO values (value) VALUES (?1)",
+            sql::params![value],
+        )
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        let value_id: i64 = conn
+            .query_row(
+                "SELECT id FROM values WHERE value = ?1",
+                sql::params![value],
+                |row| row.get(0),
+            )
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        // Map every key to that value id.
+        for key in &keys {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM memory WHERE key = ?1",
+                    sql::params![key],
+                    |_| Ok(true),
+                )
+                .optional()
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?
+                .unwrap_or(false);
+            if exists {
+                eprintln!("memory_store: overwriting existing key `{key}`");
+            }
+            conn.execute(
+                "INSERT OR REPLACE INTO memory (key, value_id) VALUES (?1, ?2)",
+                sql::params![key, value_id],
+            )
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
+        Ok(Json(MemoryStoreResult { success: true }))
+    }
+
+    /// Load a value from the key-value memory store
+    #[tool]
+    pub async fn memory_load(
+        &self,
+        Parameters(MemoryLoadParams { keys }): Parameters<MemoryLoadParams>,
+    ) -> Result<Json<MemoryLoadResult>, rmcp::ErrorData> {
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            if !self.memory_db_path.exists() {
+                return Ok(Json(MemoryLoadResult { value: None }));
+            }
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        let mut value = None;
+        for key in &keys {
+            value = conn
+                .query_row(
+                    "SELECT v.value FROM memory m JOIN values v ON m.value_id = v.id WHERE m.key = ?1",
+                    sql::params![key],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            if value.is_some() {
+                break;
+            }
+        }
+        Ok(Json(MemoryLoadResult { value }))
+    }
 }
 
 #[prompt_handler(router = self.prompt_router)]
@@ -377,6 +513,7 @@ mod tests {
             read_path_allow_list: vec![],
             no_auto_path_allow: false,
             enable_compressed: false,
+            dump_memory: false,
         };
         CodepalServer::new(&opts)
             .await
