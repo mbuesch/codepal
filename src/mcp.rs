@@ -1,6 +1,6 @@
 use crate::{
     Opts,
-    mcp_struct::{
+    mcp::structs::{
         FindFilesParams, FindFilesResult, GrepDirParams, GrepFileParams, LsDirParams, LsDirResult,
         MemoryDeleteParams, MemoryDeleteResult, MemoryListResult, MemoryLoadParams,
         MemoryLoadResult, MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptSecAudit,
@@ -31,6 +31,10 @@ use std::{
 };
 use tokio::fs;
 
+mod structs;
+#[cfg(test)]
+mod tests;
+
 const READ_FILE_MAX_SIZE: u64 = 256 * 1024;
 const MAX_DIR_ENTRIES: usize = 16 * 1024;
 const MAX_GREP_DIR_MATCHES: usize = 500;
@@ -45,7 +49,7 @@ const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 fn create_memory_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS mem_values (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
-         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES mem_values(id));",
+         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES mem_values(id), stored_at TEXT NOT NULL DEFAULT (date('now')));",
     )
 }
 
@@ -462,7 +466,7 @@ impl CodepalServer {
                 eprintln!("memory_store: overwriting existing key `{key}`");
             }
             conn.execute(
-                "INSERT OR REPLACE INTO memory (key, value_id) VALUES (?1, ?2)",
+                "INSERT OR REPLACE INTO memory (key, value_id, stored_at) VALUES (?1, ?2, date('now'))",
                 sql::params![key, value_id],
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
@@ -496,7 +500,7 @@ impl CodepalServer {
                 .replace('_', "\\_");
             value = conn
                 .query_row(
-                    "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\'",
+                    "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.stored_at DESC LIMIT 1",
                     sql::params![escaped],
                     |row| row.get(0),
                 )
@@ -717,7 +721,7 @@ impl CodepalServer {
         }
         let conn = guard.as_mut().unwrap();
         let mut stmt = conn
-            .prepare("SELECT key FROM memory ORDER BY key")
+            .prepare("SELECT key FROM memory ORDER BY stored_at DESC")
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         let keys: Vec<String> = stmt
             .query_map([], |row| row.get(0))
@@ -781,331 +785,5 @@ impl ServerHandler for CodepalServer {
             .with_server_info(server_info)
             .with_protocol_version(ProtocolVersion::LATEST)
             .with_instructions(instr)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn make_server(workspace: &Path) -> CodepalServer {
-        let opts = Opts {
-            workspace: workspace.to_path_buf(),
-            read_path_allow_list: vec![],
-            no_auto_path_allow: false,
-            enable_compressed: false,
-            dump_memory: false,
-        };
-        CodepalServer::new(&opts)
-            .await
-            .expect("server creation failed")
-    }
-
-    #[tokio::test]
-    async fn ls_dir_returns_sorted_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("b.txt"), "").await.unwrap();
-        fs::write(dir.path().join("a.txt"), "").await.unwrap();
-        fs::create_dir(dir.path().join("subdir")).await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let result = server
-            .ls_dir(Parameters(LsDirParams {
-                path: dir.path().to_str().unwrap().to_string(),
-            }))
-            .await
-            .unwrap();
-        assert_eq!(result.0.entries, vec!["a.txt", "b.txt", "subdir/"]);
-    }
-
-    #[tokio::test]
-    async fn ls_dir_on_file_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("file.txt");
-        fs::write(&file, "hi").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .ls_dir(Parameters(LsDirParams {
-                path: file.to_str().unwrap().to_string(),
-            }))
-            .await
-            .err()
-            .expect("expected Err");
-        assert!(err.message.contains("Not a directory"));
-    }
-
-    #[tokio::test]
-    async fn ls_dir_outside_allowlist_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let other = tempfile::tempdir().unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .ls_dir(Parameters(LsDirParams {
-                path: other.path().to_str().unwrap().to_string(),
-            }))
-            .await
-            .err()
-            .expect("expected Err");
-        assert!(err.message.contains("EPERM"));
-    }
-
-    #[tokio::test]
-    async fn read_file_entire_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("hello.txt");
-        fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let content = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: None,
-                end_line: None,
-            }))
-            .await
-            .unwrap();
-        assert_eq!(content, "line1\nline2\nline3");
-    }
-
-    #[tokio::test]
-    async fn read_file_with_start_line() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("hello.txt");
-        fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let content = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: Some(2),
-                end_line: None,
-            }))
-            .await
-            .unwrap();
-        assert_eq!(content, "line2\nline3");
-    }
-
-    #[tokio::test]
-    async fn read_file_with_end_line() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("hello.txt");
-        fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let content = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: None,
-                end_line: Some(2),
-            }))
-            .await
-            .unwrap();
-        assert_eq!(content, "line1\nline2");
-    }
-
-    #[tokio::test]
-    async fn read_file_with_line_range() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("hello.txt");
-        fs::write(&file, "line1\nline2\nline3\nline4\n")
-            .await
-            .unwrap();
-
-        let server = make_server(dir.path()).await;
-        let content = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: Some(2),
-                end_line: Some(3),
-            }))
-            .await
-            .unwrap();
-        assert_eq!(content, "line2\nline3");
-    }
-
-    #[tokio::test]
-    async fn read_file_on_directory_errors() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .read_file(Parameters(ReadFileParams {
-                path: dir.path().to_str().unwrap().to_string(),
-                start_line: None,
-                end_line: None,
-            }))
-            .await
-            .unwrap_err();
-        assert!(err.message.contains("Not a file"));
-    }
-
-    #[tokio::test]
-    async fn read_file_too_large_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("big.bin");
-        fs::write(&file, vec![b'x'; (READ_FILE_MAX_SIZE + 1) as usize])
-            .await
-            .unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: None,
-                end_line: None,
-            }))
-            .await
-            .unwrap_err();
-        assert!(err.message.contains("File too large"));
-    }
-
-    #[tokio::test]
-    async fn read_file_outside_allowlist_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let other = tempfile::tempdir().unwrap();
-        let file = other.path().join("secret.txt");
-        fs::write(&file, "secret").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .read_file(Parameters(ReadFileParams {
-                path: file.to_str().unwrap().to_string(),
-                start_line: None,
-                end_line: None,
-            }))
-            .await
-            .unwrap_err();
-        assert!(err.message.contains("EPERM"));
-    }
-
-    #[tokio::test]
-    async fn grep_file_basic_match() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("code.txt");
-        fs::write(&file, "foo bar\nbaz\nfoo qux\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let result = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "foo".to_string(),
-                case_insensitive: None,
-                dot_matches_newline: None,
-                context_lines: None,
-            }))
-            .await
-            .unwrap();
-        assert!(result.contains("1:foo bar"));
-        assert!(result.contains("3:foo qux"));
-        assert!(!result.contains("baz"));
-    }
-
-    #[tokio::test]
-    async fn grep_file_case_insensitive() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("code.txt");
-        fs::write(&file, "Hello World\nhello world\nGOODBYE\n")
-            .await
-            .unwrap();
-
-        let server = make_server(dir.path()).await;
-        let result = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "hello".to_string(),
-                case_insensitive: Some(true),
-                dot_matches_newline: None,
-                context_lines: None,
-            }))
-            .await
-            .unwrap();
-        assert!(result.contains("Hello World"));
-        assert!(result.contains("hello world"));
-        assert!(!result.contains("GOODBYE"));
-    }
-
-    #[tokio::test]
-    async fn grep_file_no_match_returns_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("code.txt");
-        fs::write(&file, "foo bar\nbaz\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let result = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "zzz".to_string(),
-                case_insensitive: None,
-                dot_matches_newline: None,
-                context_lines: None,
-            }))
-            .await
-            .unwrap();
-        assert_eq!(result, "");
-    }
-
-    #[tokio::test]
-    async fn grep_file_context_lines() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("code.txt");
-        fs::write(&file, "before\nmatch\nafter\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let result = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "match".to_string(),
-                case_insensitive: None,
-                dot_matches_newline: None,
-                context_lines: Some(1),
-            }))
-            .await
-            .unwrap();
-        assert!(result.contains("1-before"));
-        assert!(result.contains("2:match"));
-        assert!(result.contains("3-after"));
-    }
-
-    #[tokio::test]
-    async fn grep_file_invalid_regex_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("code.txt");
-        fs::write(&file, "some content\n").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "[invalid".to_string(),
-                case_insensitive: None,
-                dot_matches_newline: None,
-                context_lines: None,
-            }))
-            .await
-            .unwrap_err();
-        assert!(err.message.contains("Invalid regex"));
-    }
-
-    #[tokio::test]
-    async fn grep_file_outside_allowlist_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let other = tempfile::tempdir().unwrap();
-        let file = other.path().join("secret.txt");
-        fs::write(&file, "secret").await.unwrap();
-
-        let server = make_server(dir.path()).await;
-        let err = server
-            .grep_file(Parameters(GrepFileParams {
-                path: file.to_str().unwrap().to_string(),
-                pattern: "secret".to_string(),
-                case_insensitive: None,
-                dot_matches_newline: None,
-                context_lines: None,
-            }))
-            .await
-            .unwrap_err();
-        assert!(err.message.contains("EPERM"));
     }
 }

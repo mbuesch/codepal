@@ -4,7 +4,7 @@ use rmcp::{ServiceExt, transport::stdio};
 use std::path::PathBuf;
 
 mod mcp;
-mod mcp_struct;
+
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Codepal MCP server")]
