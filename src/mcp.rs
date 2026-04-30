@@ -44,7 +44,6 @@ pub struct CodepalServer {
     workspace: PathBuf,
     read_path_allow_list: Vec<PathBuf>,
     enable_compressed: bool,
-    #[allow(dead_code)]
     prog_lang: ProgLanguage,
     prompt_router: PromptRouter<Self>,
     tool_router: ToolRouter<Self>,
@@ -354,6 +353,9 @@ impl ServerHandler for CodepalServer {
 
         let mut instr = String::new();
         instr.push_str(include_str!("mcp_instr.md"));
+        if self.prog_lang == ProgLanguage::Rust {
+            instr.push_str(include_str!("mcp_instr_rust.md"));
+        }
         if self.enable_compressed {
             instr.push_str(include_str!("mcp_instr_compressed.md"));
         }
