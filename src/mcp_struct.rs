@@ -74,3 +74,51 @@ pub struct MemoryLoadResult {
     #[schemars(description = "The stored value, or null if not found")]
     pub value: Option<String>,
 }
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct GrepDirParams {
+    #[schemars(description = "Path of directory to search recursively")]
+    pub path: String,
+    #[schemars(description = "Regex pattern to search for in file contents")]
+    pub pattern: String,
+    #[schemars(description = "Optional: Case insensitive (default: false)")]
+    pub case_insensitive: Option<bool>,
+    #[schemars(description = "Optional: Enable `.` matches `\\n` (default: false)")]
+    pub dot_matches_newline: Option<bool>,
+    #[schemars(description = "Optional: Context lines, like grep -C (default: 0)")]
+    pub context_lines: Option<u16>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct FindFilesParams {
+    #[schemars(description = "Path of directory to search recursively")]
+    pub path: String,
+    #[schemars(description = "Regex pattern to match against relative file paths")]
+    pub pattern: String,
+    #[schemars(description = "Optional: Case insensitive (default: true)")]
+    pub case_insensitive: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct FindFilesResult {
+    #[schemars(description = "Matching absolute file paths")]
+    pub files: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryListResult {
+    #[schemars(description = "All stored keys")]
+    pub keys: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryDeleteParams {
+    #[schemars(description = "Key to delete from the memory store")]
+    pub key: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct MemoryDeleteResult {
+    #[schemars(description = "Whether the key existed and was deleted")]
+    pub found: bool,
+}

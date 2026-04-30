@@ -1,10 +1,13 @@
 use crate::{
     Opts,
     mcp_struct::{
-        GrepFileParams, LsDirParams, LsDirResult, MemoryLoadParams, MemoryLoadResult,
-        MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptSecAudit, ReadFileParams,
+        FindFilesParams, FindFilesResult, GrepDirParams, GrepFileParams, LsDirParams, LsDirResult,
+        MemoryDeleteParams, MemoryDeleteResult, MemoryListResult, MemoryLoadParams,
+        MemoryLoadResult, MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptSecAudit,
+        ReadFileParams,
     },
 };
+use walkdir::WalkDir;
 use anyhow::{self as ah, Context as _, format_err as err};
 use rmcp::{
     RoleServer, ServerHandler,
@@ -30,6 +33,13 @@ use tokio::fs;
 
 const READ_FILE_MAX_SIZE: u64 = 256 * 1024;
 const MAX_DIR_ENTRIES: usize = 16 * 1024;
+const MAX_GREP_DIR_MATCHES: usize = 500;
+const MAX_GREP_DIR_FILES: usize = 10_000;
+const MAX_GREP_DIR_RESULT_SIZE: usize = 8 * 1024 * 1024;
+const MAX_FIND_FILES: usize = 10_000;
+const MEMORY_MAX_KEYS: usize = 64;
+const MEMORY_MAX_KEY_LEN: usize = 256;
+const MEMORY_MAX_VALUE_LEN: usize = 64 * 1024;
 const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 
 fn create_memory_tables(conn: &sql::Connection) -> sql::Result<()> {
@@ -395,6 +405,26 @@ impl CodepalServer {
                 None,
             ));
         }
+        if keys.len() > MEMORY_MAX_KEYS {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("too many keys (max {MEMORY_MAX_KEYS})"),
+                None,
+            ));
+        }
+        for key in &keys {
+            if key.len() > MEMORY_MAX_KEY_LEN {
+                return Err(rmcp::ErrorData::invalid_params(
+                    format!("key too long (max {MEMORY_MAX_KEY_LEN} bytes)"),
+                    None,
+                ));
+            }
+        }
+        if value.len() > MEMORY_MAX_VALUE_LEN {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("value too long (max {} bytes)", MEMORY_MAX_VALUE_LEN),
+                None,
+            ));
+        }
         let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
         if guard.is_none() {
             let conn = sql::Connection::open(&self.memory_db_path)
@@ -477,6 +507,253 @@ impl CodepalServer {
             }
         }
         Ok(Json(MemoryLoadResult { value }))
+    }
+
+    /// Recursively search file contents in a directory tree
+    #[tool]
+    pub async fn grep_dir(
+        &self,
+        Parameters(GrepDirParams {
+            path,
+            pattern,
+            case_insensitive,
+            dot_matches_newline,
+            context_lines,
+        }): Parameters<GrepDirParams>,
+    ) -> Result<String, rmcp::ErrorData> {
+        let dir = self
+            .path_check_allowed(path.into())
+            .await
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        let meta = fs::metadata(&dir).await.map_err(|_| {
+            rmcp::ErrorData::invalid_params(format!("`{}`: EPERM", dir.display()), None)
+        })?;
+        if !meta.is_dir() {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("`{}`: Not a directory", dir.display()),
+                None,
+            ));
+        }
+
+        let re = regex::RegexBuilder::new(&pattern)
+            .case_insensitive(case_insensitive.unwrap_or(false))
+            .dot_matches_new_line(dot_matches_newline.unwrap_or(false))
+            .build()
+            .map_err(|e| rmcp::ErrorData::invalid_params(format!("Invalid regex: {e}"), None))?;
+
+        let ctx = context_lines.unwrap_or(0) as usize;
+
+        let dir_clone = dir.clone();
+        let file_paths: Vec<PathBuf> = tokio::task::spawn_blocking(move || {
+            WalkDir::new(&dir_clone)
+                .follow_links(false)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .map(|e| e.into_path())
+                .take(MAX_GREP_DIR_FILES)
+                .collect()
+        })
+        .await
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+
+        let mut result = String::new();
+        let mut total_matches: usize = 0;
+        let mut limit_reached = false;
+
+        'files: for file_path in &file_paths {
+            let meta = match fs::metadata(file_path).await {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if meta.len() > READ_FILE_MAX_SIZE {
+                continue;
+            }
+            let content = match fs::read_to_string(file_path).await {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            let lines: Vec<&str> = content.lines().collect();
+            let matching: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, line)| re.is_match(line))
+                .map(|(i, _)| i)
+                .collect();
+
+            if matching.is_empty() {
+                continue;
+            }
+
+            let mut ranges: Vec<(usize, usize)> = vec![];
+            for &m in &matching {
+                let start = m.saturating_sub(ctx);
+                let end = (m + ctx).min(lines.len().saturating_sub(1));
+                if let Some(last) = ranges.last_mut()
+                    && start <= last.1 + 1
+                {
+                    last.1 = last.1.max(end);
+                    continue;
+                }
+                ranges.push((start, end));
+            }
+
+            let match_set: std::collections::HashSet<usize> = matching.into_iter().collect();
+
+            result.push_str(&format!("=== {} ===\n", file_path.display()));
+            let mut first_range = true;
+            'ranges: for (rstart, rend) in &ranges {
+                if !first_range {
+                    result.push_str("--\n");
+                }
+                first_range = false;
+                for (i, line) in lines
+                    .iter()
+                    .enumerate()
+                    .take(rend.saturating_add(1))
+                    .skip(*rstart)
+                {
+                    let nr = i.saturating_add(1);
+                    let sep = if match_set.contains(&i) { ':' } else { '-' };
+                    result.push_str(&format!("{nr}{sep}{line}\n"));
+                    if match_set.contains(&i) {
+                        total_matches += 1;
+                        if total_matches >= MAX_GREP_DIR_MATCHES {
+                            limit_reached = true;
+                            break 'ranges;
+                        }
+                    }
+                    if result.len() >= MAX_GREP_DIR_RESULT_SIZE {
+                        limit_reached = true;
+                        break 'ranges;
+                    }
+                }
+            }
+            if limit_reached {
+                break 'files;
+            }
+        }
+
+        if limit_reached {
+            result.push_str(&format!(
+                "\n... limit reached ({MAX_GREP_DIR_MATCHES} matches / {MAX_GREP_DIR_FILES} files / {} MB output), refine pattern ...\n",
+                MAX_GREP_DIR_RESULT_SIZE / 1024 / 1024,
+            ));
+        }
+
+        Ok(result)
+    }
+
+    /// Find files matching a regex pattern in a directory tree
+    #[tool]
+    pub async fn find_files(
+        &self,
+        Parameters(FindFilesParams {
+            path,
+            pattern,
+            case_insensitive,
+        }): Parameters<FindFilesParams>,
+    ) -> Result<Json<FindFilesResult>, rmcp::ErrorData> {
+        let dir = self
+            .path_check_allowed(path.into())
+            .await
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        let meta = fs::metadata(&dir).await.map_err(|_| {
+            rmcp::ErrorData::invalid_params(format!("`{}`: EPERM", dir.display()), None)
+        })?;
+        if !meta.is_dir() {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("`{}`: Not a directory", dir.display()),
+                None,
+            ));
+        }
+
+        let re = regex::RegexBuilder::new(&pattern)
+            .case_insensitive(case_insensitive.unwrap_or(true))
+            .build()
+            .map_err(|e| rmcp::ErrorData::invalid_params(format!("Invalid regex: {e}"), None))?;
+
+        let dir_clone = dir.clone();
+        let files: Vec<String> = tokio::task::spawn_blocking(move || {
+            WalkDir::new(&dir_clone)
+                .follow_links(false)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .filter_map(|e| {
+                    let rel = e.path().strip_prefix(&dir_clone).ok()?;
+                    let rel_str = rel.to_string_lossy();
+                    if re.is_match(&rel_str) {
+                        Some(e.path().to_string_lossy().into_owned())
+                    } else {
+                        None
+                    }
+                })
+                .take(MAX_FIND_FILES)
+                .collect()
+        })
+        .await
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+
+        Ok(Json(FindFilesResult { files }))
+    }
+
+    /// List all keys (and values) in the memory store
+    #[tool]
+    pub async fn memory_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            if !self.memory_db_path.exists() {
+                return Ok(Json(MemoryListResult { keys: vec![] }));
+            }
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT key FROM memory ORDER BY key")
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        let keys: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(Json(MemoryListResult { keys }))
+    }
+
+    /// Delete a key from the memory store
+    #[tool]
+    pub async fn memory_delete(
+        &self,
+        Parameters(MemoryDeleteParams { key }): Parameters<MemoryDeleteParams>,
+    ) -> Result<Json<MemoryDeleteResult>, rmcp::ErrorData> {
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            if !self.memory_db_path.exists() {
+                return Ok(Json(MemoryDeleteResult { found: false }));
+            }
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        let n = conn
+            .execute("DELETE FROM memory WHERE key = ?1", sql::params![key])
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        conn.execute(
+            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
+            [],
+        )
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        Ok(Json(MemoryDeleteResult { found: n > 0 }))
     }
 }
 
