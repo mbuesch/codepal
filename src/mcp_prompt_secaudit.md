@@ -12,6 +12,7 @@ Things that are considered to be critical security vulnerabilities include, but 
 - Unintended private information disclosure: Private keys, secrets, credentials, internal-only information, etc... .
 - Denial of Service (DoS).
 - TOCTOU (Time of Check to Time of Use) bugs in security critical contexts.
+- Possible timing attacks in security critical contexts. (Constant time algorithms/compare).
 - Implementation errors, usage errors or systematic errors in cryptographic algorithms or protocols.
 - Usage of broken cryptographic algorithms or protocols for security sensitive tasks.
 
