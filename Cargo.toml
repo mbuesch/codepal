@@ -15,3 +15,13 @@ tokio = { version = "1", features = [ "rt-multi-thread", "macros", "fs" ] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[profile.dev]
+debug = "limited"
+panic = "abort"
+
+[profile.release]
+lto = "fat"
+panic = "abort"
+strip = "symbols"
+overflow-checks = true
