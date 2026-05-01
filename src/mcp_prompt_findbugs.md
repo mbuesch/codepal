@@ -15,6 +15,7 @@ Look for, but do not limit yourself to:
 - **Multithreading bugs**: Data races, incorrect use of atomics (wrong ordering), deadlocks, livelocks, incorrect condition-variable usage, missing memory barriers, etc... .
 - **Interrupt synchronization / signal synchronization bugs**: Async-signal-unsafe functions called from signal handlers, incorrect use of `volatile` or atomics for interrupt-shared state, missing critical-section protection, incorrect use of locks, mutexes, semaphores, etc... .
 - **Concurrency correctness**: Incorrect lock granularity, incorrect unlock order, missing lock on shared state, etc... .
+- **Asynchronous bugs**: Incorrect use of async/await, incorrect use of futures, incorrect use of async runtimes, etc... .
 - **Unsound code**: Safe abstractions that can be used to trigger Undefined Behavior without Rust `unsafe` on the caller side, violated aliasing rules, invalid pointer provenance, misuse of Rust `transmute`, use-after-free, out-of-bounds pointer arithmetic, wrong Rust `unsafe impl` for `Send`/`Sync`/`Unpin`, incorrect lifetime annotations that enable use-after-free, etc... .
 - **Resource leaks**: Memory leaks, file descriptor leaks, lock not released on all paths, etc... .
 - **Integer bugs**: Overflow, underflow, truncation, sign-extension errors, incorrect widening/narrowing cast, unnecessary casts, etc... .
