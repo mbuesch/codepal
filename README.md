@@ -71,8 +71,27 @@ These instructions are provided as system prompts to agents and define the tools
       "type": "stdio",
       "command": "/opt/codepal/bin/codepal",
       "args": [
-        "--workspace", "${workspaceFolder}",
-        "--enable-compressed",
+         "--workspace=${workspaceFolder}"
+        ,"--enable-compressed"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+
+## Claude Code configuration
+
+Create `.mcp.json` in the project root with the following content:
+
+```json
+{
+  "mcpServers": {
+    "codepal": {
+      "command": "/opt/codepal/bin/codepal",
+      "args": [
+         "--workspace=."
+        ,"--enable-compressed"
       ],
       "env": {}
     }

@@ -305,6 +305,7 @@ impl CodepalServer {
         &self,
         Parameters(LsDirParams { path }): Parameters<LsDirParams>,
     ) -> Result<Json<LsDirResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: ls_dir");
         let path = self
             .path_check_allowed(path.into())
             .await
@@ -355,6 +356,7 @@ impl CodepalServer {
             end_line,
         }): Parameters<ReadFileParams>,
     ) -> Result<String, rmcp::ErrorData> {
+        eprintln!("Calling tool: read_file");
         let path = self
             .path_check_allowed(path.into())
             .await
@@ -415,6 +417,7 @@ impl CodepalServer {
             context_lines,
         }): Parameters<GrepFileParams>,
     ) -> Result<String, rmcp::ErrorData> {
+        eprintln!("Calling tool: grep_file");
         let path = self
             .path_check_allowed(path.into())
             .await
@@ -503,6 +506,7 @@ impl CodepalServer {
         &self,
         Parameters(MemoryStoreParams { keys, value }): Parameters<MemoryStoreParams>,
     ) -> Result<Json<MemoryStoreResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_store");
         if keys.is_empty() {
             return Err(rmcp::ErrorData::invalid_params(
                 "keys must not be empty",
@@ -590,6 +594,7 @@ impl CodepalServer {
         &self,
         Parameters(MemoryLoadParams { keys }): Parameters<MemoryLoadParams>,
     ) -> Result<Json<MemoryLoadResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_load");
         let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
         if guard.is_none() {
             if !self.memory_db_path.exists() {
@@ -652,6 +657,7 @@ impl CodepalServer {
             context_lines,
         }): Parameters<GrepDirParams>,
     ) -> Result<String, rmcp::ErrorData> {
+        eprintln!("Calling tool: grep_dir");
         let dir = self
             .path_check_allowed(path.into())
             .await
@@ -787,6 +793,7 @@ impl CodepalServer {
             case_insensitive,
         }): Parameters<FindFilesParams>,
     ) -> Result<Json<FindFilesResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: find_files");
         let dir = self
             .path_check_allowed(path.into())
             .await
@@ -835,6 +842,7 @@ impl CodepalServer {
     /// **PRIMARY TOOL** for: List all keys (and values) in the memory store
     #[tool]
     pub async fn memory_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_list");
         let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
         if guard.is_none() {
             if !self.memory_db_path.exists() {
@@ -864,6 +872,7 @@ impl CodepalServer {
         &self,
         Parameters(MemoryDeleteParams { key }): Parameters<MemoryDeleteParams>,
     ) -> Result<Json<MemoryDeleteResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_delete");
         let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
         if guard.is_none() {
             if !self.memory_db_path.exists() {

@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "${workspaceFolder}/target/debug/codepal",
       "args": [
-        "--workspace", "${workspaceFolder}",
+        "--workspace=${workspaceFolder}",
         "--enable-compressed",
       ],
       "env": {}
