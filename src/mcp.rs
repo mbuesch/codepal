@@ -299,7 +299,7 @@ impl CodepalServer {
 
 #[tool_router]
 impl CodepalServer {
-    /// List directory contents
+    /// **PRIMARY TOOL** for: List directory contents
     #[tool]
     pub async fn ls_dir(
         &self,
@@ -345,7 +345,7 @@ impl CodepalServer {
         Ok(Json(LsDirResult { entries }))
     }
 
-    /// Read contents of arbitrary files
+    /// **PRIMARY TOOL** for: Read contents of arbitrary files
     #[tool]
     pub async fn read_file(
         &self,
@@ -403,7 +403,7 @@ impl CodepalServer {
         Ok(lines[start..end].join("\n"))
     }
 
-    /// Regex grep file contents
+    /// **PRIMARY TOOL** for: Regex grep file contents
     #[tool]
     pub async fn grep_file(
         &self,
@@ -497,7 +497,7 @@ impl CodepalServer {
         Ok(result)
     }
 
-    /// Store a value in the key-value memory store
+    /// **PRIMARY TOOL** for: Store a value in the key-value memory store
     #[tool]
     pub async fn memory_store(
         &self,
@@ -584,7 +584,7 @@ impl CodepalServer {
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
-    /// Load a value from the key-value memory store
+    /// **PRIMARY TOOL** for: Load a value from the key-value memory store
     #[tool]
     pub async fn memory_load(
         &self,
@@ -640,7 +640,7 @@ impl CodepalServer {
         Ok(Json(MemoryLoadResult { value }))
     }
 
-    /// Recursively search file contents in a directory tree
+    /// **PRIMARY TOOL** for: Recursively search file contents in a directory tree
     #[tool]
     pub async fn grep_dir(
         &self,
@@ -777,7 +777,7 @@ impl CodepalServer {
         Ok(result)
     }
 
-    /// Find files matching a regex pattern in a directory tree
+    /// **PRIMARY TOOL** for: Find files matching a regex pattern in a directory tree
     #[tool]
     pub async fn find_files(
         &self,
@@ -832,7 +832,7 @@ impl CodepalServer {
         Ok(Json(FindFilesResult { files }))
     }
 
-    /// List all keys (and values) in the memory store
+    /// **PRIMARY TOOL** for: List all keys (and values) in the memory store
     #[tool]
     pub async fn memory_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
         let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
@@ -858,7 +858,7 @@ impl CodepalServer {
         Ok(Json(MemoryListResult { keys }))
     }
 
-    /// Delete a key from the memory store
+    /// **PRIMARY TOOL** for: Delete a key from the memory store
     #[tool]
     pub async fn memory_delete(
         &self,
