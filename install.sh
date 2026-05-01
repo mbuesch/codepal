@@ -51,6 +51,6 @@ while [ $# -ge 1 ]; do
 done
 target="$basedir/target/$release"
 
-install_entry_checks client
+install_entry_checks
 install_dirs
 install_codepal

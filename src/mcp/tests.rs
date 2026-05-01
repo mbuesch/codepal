@@ -379,7 +379,9 @@ async fn grep_dir_case_insensitive() {
 #[tokio::test]
 async fn grep_dir_no_match_returns_empty() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("a.txt"), "foo bar\n").await.unwrap();
+    fs::write(dir.path().join("a.txt"), "foo bar\n")
+        .await
+        .unwrap();
 
     let server = make_server(dir.path()).await;
     let result = server

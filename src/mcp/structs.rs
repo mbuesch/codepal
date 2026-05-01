@@ -14,6 +14,24 @@ pub struct PromptSecAudit {
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptFindBugs {
+    #[schemars(description = "What to find bugs in")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptFindPerf {
+    #[schemars(description = "What to find performance improvements in")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptRefactor {
+    #[schemars(description = "What to refactor")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
 pub struct LsDirParams {
     #[schemars(description = "Path of directory to list")]
     pub path: String,

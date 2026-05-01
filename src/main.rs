@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 mod mcp;
 
-
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Codepal MCP server")]
 pub struct Opts {

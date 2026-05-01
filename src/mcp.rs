@@ -3,11 +3,10 @@ use crate::{
     mcp::structs::{
         FindFilesParams, FindFilesResult, GrepDirParams, GrepFileParams, LsDirParams, LsDirResult,
         MemoryDeleteParams, MemoryDeleteResult, MemoryListResult, MemoryLoadParams,
-        MemoryLoadResult, MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptSecAudit,
-        ReadFileParams,
+        MemoryLoadResult, MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptFindBugs,
+        PromptFindPerf, PromptRefactor, PromptSecAudit, ReadFileParams,
     },
 };
-use walkdir::WalkDir;
 use anyhow::{self as ah, Context as _, format_err as err};
 use rmcp::{
     RoleServer, ServerHandler,
@@ -30,6 +29,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::fs;
+use walkdir::WalkDir;
 
 mod structs;
 #[cfg(test)]
@@ -172,6 +172,9 @@ impl CodepalServer {
 
 const PROMPT_PREFIX: &str = include_str!("mcp_prompt_prefix.md");
 const PROMPT_SECAUDIT: &str = include_str!("mcp_prompt_secaudit.md");
+const PROMPT_FINDBUGS: &str = include_str!("mcp_prompt_findbugs.md");
+const PROMPT_FINDPERF: &str = include_str!("mcp_prompt_findperf.md");
+const PROMPT_REFACTOR: &str = include_str!("mcp_prompt_refactor.md");
 
 #[prompt_router]
 impl CodepalServer {
@@ -192,6 +195,45 @@ impl CodepalServer {
             PromptMessage::new_text(
                 PromptMessageRole::User,
                 format!("{PROMPT_SECAUDIT}\n{}", params.0.what),
+            ),
+        ]
+    }
+
+    /// Prompt to find bugs.
+    #[prompt]
+    pub async fn find_bugs(&self, params: Parameters<PromptFindBugs>) -> Vec<PromptMessage> {
+        vec![
+            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!("{PROMPT_FINDBUGS}\n{}", params.0.what),
+            ),
+        ]
+    }
+
+    /// Prompt to find performance improvements.
+    #[prompt]
+    pub async fn find_performance_improvements(
+        &self,
+        params: Parameters<PromptFindPerf>,
+    ) -> Vec<PromptMessage> {
+        vec![
+            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!("{PROMPT_FINDPERF}\n{}", params.0.what),
+            ),
+        ]
+    }
+
+    /// Prompt to refactor code.
+    #[prompt]
+    pub async fn refactor(&self, params: Parameters<PromptRefactor>) -> Vec<PromptMessage> {
+        vec![
+            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::User,
+                format!("{PROMPT_REFACTOR}\n{}", params.0.what),
             ),
         ]
     }
