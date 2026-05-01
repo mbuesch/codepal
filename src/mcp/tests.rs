@@ -7,6 +7,7 @@ async fn make_server(workspace: &Path) -> CodepalServer {
         no_auto_path_allow: false,
         enable_compressed: false,
         dump_memory: false,
+        memory_max_age_days: None,
     };
     CodepalServer::new(&opts)
         .await

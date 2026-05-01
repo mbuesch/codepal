@@ -48,9 +48,37 @@ const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 
 fn create_memory_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS mem_values (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);
-         CREATE TABLE IF NOT EXISTS memory (key TEXT PRIMARY KEY, value_id INTEGER NOT NULL REFERENCES mem_values(id), stored_at TEXT NOT NULL DEFAULT (date('now')));",
+        "CREATE TABLE IF NOT EXISTS mem_values (
+            id INTEGER PRIMARY KEY,
+            value TEXT NOT NULL UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS memory (
+            key TEXT PRIMARY KEY,
+            value_id INTEGER NOT NULL REFERENCES mem_values(id),
+            stored_at TEXT NOT NULL DEFAULT (datetime('now')),
+            accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            access_count INTEGER NOT NULL DEFAULT 0
+        );",
     )
+}
+
+fn prune_expired_entries(conn: &sql::Connection, max_age_days: u64) -> sql::Result<()> {
+    let modifier = format!("-{max_age_days} days");
+    let n = conn.execute(
+        "DELETE FROM memory WHERE accessed_at < datetime('now', ?1)",
+        sql::params![modifier],
+    )?;
+    if n > 0 {
+        eprintln!(
+            "memory: pruned {n} expired entr{}.",
+            if n == 1 { "y" } else { "ies" }
+        );
+        conn.execute(
+            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
+            [],
+        )?;
+    }
+    Ok(())
 }
 
 async fn canonicalize(path: &Path) -> ah::Result<PathBuf> {
@@ -74,6 +102,7 @@ pub struct CodepalServer {
     prog_lang: ProgLanguage,
     memory_db_path: PathBuf,
     memory_db_conn: Arc<Mutex<Option<sql::Connection>>>,
+    memory_max_age_days: Option<u64>,
     prompt_router: PromptRouter<Self>,
     tool_router: ToolRouter<Self>,
 }
@@ -122,6 +151,7 @@ impl CodepalServer {
             prog_lang,
             memory_db_path: workspace.join(MEMORY_DB_FILENAME),
             memory_db_conn: Arc::new(Mutex::new(None)),
+            memory_max_age_days: opts.memory_max_age_days,
             prompt_router: Self::prompt_router(),
             tool_router: Self::tool_router(),
         })
@@ -137,15 +167,43 @@ impl CodepalServer {
         create_memory_tables(&conn).context("Failed to ensure memory schema")?;
         let mut stmt = conn
             .prepare(
-                "SELECT m.key, v.value FROM memory m JOIN mem_values v ON m.value_id = v.id ORDER BY m.key",
+                "SELECT m.key, v.value, m.stored_at, m.accessed_at, m.access_count \
+                 FROM memory m JOIN mem_values v ON m.value_id = v.id \
+                 ORDER BY m.accessed_at DESC",
             )
             .context("Failed to prepare query")?;
         let mut rows = stmt.query([]).context("Failed to query memory")?;
         let mut found = false;
         while let Some(row) = rows.next().context("Failed to read row")? {
+            if !found {
+                println!(
+                    "{:<40}  {:<19}  {:<19}  {:>7}  VALUE",
+                    "KEY", "STORED", "ACCESSED", "ACCESSES"
+                );
+                println!("{}", "-".repeat(100));
+            }
             let key: String = row.get(0).context("Failed to read key")?;
             let value: String = row.get(1).context("Failed to read value")?;
-            println!("{key}\t{value}");
+            let stored_at: String = row.get(2).context("Failed to read stored_at")?;
+            let accessed_at: String = row.get(3).context("Failed to read accessed_at")?;
+            let access_count: i64 = row.get(4).context("Failed to read access_count")?;
+            // Truncate value for display — replace newlines with spaces.
+            let display_value: String = value
+                .lines()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(80)
+                .collect();
+            let display_value = if value.len() > display_value.len() {
+                format!("{display_value}…")
+            } else {
+                display_value
+            };
+            println!(
+                "{:<40}  {:<19}  {:<19}  {:>7}  {}",
+                key, stored_at, accessed_at, access_count, display_value
+            );
             found = true;
         }
         if !found {
@@ -480,6 +538,10 @@ impl CodepalServer {
             *guard = Some(conn);
         }
         let conn = guard.as_mut().unwrap();
+        if let Some(max_age_days) = self.memory_max_age_days {
+            prune_expired_entries(conn, max_age_days)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
         // Insert the value once; get its id.
         conn.execute(
             "INSERT OR IGNORE INTO mem_values (value) VALUES (?1)",
@@ -493,7 +555,7 @@ impl CodepalServer {
                 |row| row.get(0),
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        // Map every key to that value id.
+        // Map every key to that value id, preserving access_count on overwrite.
         for key in &keys {
             let exists: bool = conn
                 .query_row(
@@ -508,7 +570,13 @@ impl CodepalServer {
                 eprintln!("memory_store: overwriting existing key `{key}`");
             }
             conn.execute(
-                "INSERT OR REPLACE INTO memory (key, value_id, stored_at) VALUES (?1, ?2, date('now'))",
+                "INSERT INTO memory (key, value_id, stored_at, accessed_at, access_count) \
+                 VALUES (?1, ?2, datetime('now'), datetime('now'), 1) \
+                 ON CONFLICT(key) DO UPDATE SET \
+                     value_id = excluded.value_id, \
+                     stored_at = excluded.stored_at, \
+                     accessed_at = datetime('now'), \
+                     access_count = memory.access_count + 1",
                 sql::params![key, value_id],
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
@@ -534,21 +602,38 @@ impl CodepalServer {
             *guard = Some(conn);
         }
         let conn = guard.as_mut().unwrap();
+        if let Some(max_age_days) = self.memory_max_age_days {
+            prune_expired_entries(conn, max_age_days)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
         let mut value = None;
         for key in &keys {
             let escaped = key
                 .replace('\\', "\\\\")
                 .replace('%', "\\%")
                 .replace('_', "\\_");
-            value = conn
+            let found_key: Option<String> = conn
                 .query_row(
-                    "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.stored_at DESC LIMIT 1",
+                    "SELECT m.key FROM memory m WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.accessed_at DESC LIMIT 1",
                     sql::params![escaped],
                     |row| row.get(0),
                 )
                 .optional()
                 .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            if value.is_some() {
+            if let Some(ref fk) = found_key {
+                conn.execute(
+                    "UPDATE memory SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?1",
+                    sql::params![fk],
+                )
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+                value = conn
+                    .query_row(
+                        "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key = ?1",
+                        sql::params![fk],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
                 break;
             }
         }
@@ -763,7 +848,7 @@ impl CodepalServer {
         }
         let conn = guard.as_mut().unwrap();
         let mut stmt = conn
-            .prepare("SELECT key FROM memory ORDER BY stored_at DESC")
+            .prepare("SELECT key FROM memory ORDER BY accessed_at DESC")
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         let keys: Vec<String> = stmt
             .query_map([], |row| row.get(0))

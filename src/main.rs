@@ -28,6 +28,10 @@ pub struct Opts {
     /// Dump memory store contents to stdout and exit.
     #[arg(long)]
     pub dump_memory: bool,
+
+    /// Prune memory entries not accessed for longer than this many days.
+    #[arg(long, value_name = "DAYS")]
+    pub memory_max_age_days: Option<u64>,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
