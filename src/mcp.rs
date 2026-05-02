@@ -299,7 +299,7 @@ impl CodepalServer {
 
 #[tool_router]
 impl CodepalServer {
-    /// **PRIMARY TOOL** for: List directory contents
+    /// **MANDATORY PRIMARY TOOL** for: List directory contents
     #[tool]
     pub async fn ls_dir(
         &self,
@@ -346,7 +346,7 @@ impl CodepalServer {
         Ok(Json(LsDirResult { entries }))
     }
 
-    /// **PRIMARY TOOL** for: Read contents of arbitrary files
+    /// **MANDATORY PRIMARY TOOL** for: Read contents of arbitrary files
     #[tool]
     pub async fn read_file(
         &self,
@@ -405,7 +405,7 @@ impl CodepalServer {
         Ok(lines[start..end].join("\n"))
     }
 
-    /// **PRIMARY TOOL** for: Regex grep file contents
+    /// **MANDATORY PRIMARY TOOL** for: Regex grep file contents
     #[tool]
     pub async fn grep_file(
         &self,
@@ -500,7 +500,7 @@ impl CodepalServer {
         Ok(result)
     }
 
-    /// **PRIMARY TOOL** for: Store a value in the key-value memory store
+    /// **MANDATORY PRIMARY TOOL** for: Store a value in the key-value memory store
     #[tool]
     pub async fn memory_store(
         &self,
@@ -588,7 +588,7 @@ impl CodepalServer {
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
-    /// **PRIMARY TOOL** for: Load a value from the key-value memory store
+    /// **MANDATORY PRIMARY TOOL** for: Load a value from the key-value memory store
     #[tool]
     pub async fn memory_load(
         &self,
@@ -645,7 +645,7 @@ impl CodepalServer {
         Ok(Json(MemoryLoadResult { value }))
     }
 
-    /// **PRIMARY TOOL** for: Recursively search file contents in a directory tree
+    /// **MANDATORY PRIMARY TOOL** for: Recursively search file contents in a directory tree
     #[tool]
     pub async fn grep_dir(
         &self,
@@ -783,7 +783,7 @@ impl CodepalServer {
         Ok(result)
     }
 
-    /// **PRIMARY TOOL** for: Find files matching a regex pattern in a directory tree
+    /// **MANDATORY PRIMARY TOOL** for: Find files matching a regex pattern in a directory tree
     #[tool]
     pub async fn find_files(
         &self,
@@ -839,7 +839,7 @@ impl CodepalServer {
         Ok(Json(FindFilesResult { files }))
     }
 
-    /// **PRIMARY TOOL** for: List all keys (and values) in the memory store
+    /// **MANDATORY PRIMARY TOOL** for: List all keys (and values) in the memory store
     #[tool]
     pub async fn memory_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
         eprintln!("Calling tool: memory_list");
@@ -866,7 +866,7 @@ impl CodepalServer {
         Ok(Json(MemoryListResult { keys }))
     }
 
-    /// **PRIMARY TOOL** for: Delete a key from the memory store
+    /// **MANDATORY PRIMARY TOOL** for: Delete a key from the memory store
     #[tool]
     pub async fn memory_delete(
         &self,
@@ -910,11 +910,14 @@ impl ServerHandler for CodepalServer {
 
         let mut instr = String::new();
         instr.push_str(include_str!("mcp_instr.md"));
+        instr.push('\n');
         if self.prog_lang == ProgLanguage::Rust {
             instr.push_str(include_str!("mcp_instr_rust.md"));
+            instr.push('\n');
         }
         if self.enable_compressed {
             instr.push_str(include_str!("mcp_instr_compressed.md"));
+            instr.push('\n');
         }
 
         ServerInfo::new(server_capabilities)
