@@ -343,7 +343,7 @@ impl CodepalServer {
 
 #[tool_router]
 impl CodepalServer {
-    /// List directory contents
+    /// **MANDATORY PRIMARY TOOL**: List directory contents
     #[tool]
     pub async fn ls(
         &self,
@@ -390,7 +390,7 @@ impl CodepalServer {
         Ok(Json(LsDirResult { entries }))
     }
 
-    /// Read contents of arbitrary files
+    /// **MANDATORY PRIMARY TOOL**: Read contents of arbitrary files
     #[tool]
     pub async fn read(
         &self,
@@ -449,7 +449,7 @@ impl CodepalServer {
         Ok(lines[start..end].join("\n"))
     }
 
-    /// Regex grep file contents
+    /// **MANDATORY PRIMARY TOOL**: Regex grep file contents
     #[tool]
     pub async fn grep(
         &self,
@@ -577,7 +577,7 @@ impl CodepalServer {
         }
     }
 
-    /// Find files matching a regex pattern in a directory tree
+    /// **MANDATORY PRIMARY TOOL**: Find files matching a regex pattern in a directory tree
     #[tool]
     pub async fn find(
         &self,
@@ -640,7 +640,7 @@ impl CodepalServer {
         Ok(Json(FindFilesResult { files }))
     }
 
-    /// List all keys in the memory store
+    /// **MANDATORY PRIMARY TOOL**: List all keys in the memory store
     #[tool]
     pub async fn mem_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
         eprintln!("Calling tool: mem_list");
@@ -667,7 +667,7 @@ impl CodepalServer {
         Ok(Json(MemoryListResult { keys }))
     }
 
-    /// Store a value in the key-value memory store
+    /// **MANDATORY PRIMARY TOOL**: Store a value in the key-value memory store
     #[tool]
     pub async fn mem_store(
         &self,
@@ -761,7 +761,7 @@ impl CodepalServer {
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
-    /// Load a value from the key-value memory store
+    /// **MANDATORY PRIMARY TOOL**: Load a value from the key-value memory store
     #[tool]
     pub async fn mem_load(
         &self,
@@ -830,7 +830,7 @@ impl CodepalServer {
         Ok(Json(MemoryLoadResult { value }))
     }
 
-    /// Delete a key from the memory store
+    /// **MANDATORY PRIMARY TOOL**: Delete a key from the memory store
     #[tool]
     pub async fn mem_delete(
         &self,
