@@ -238,30 +238,16 @@ impl CodepalServer {
         let mut rows = stmt.query([]).context("Failed to query memory")?;
         let mut found = false;
         while let Some(row) = rows.next().context("Failed to read row")? {
-            if !found {
-                println!(
-                    "{:<40}  {:<19}  {:<19}  {:>7}  VALUE",
-                    "KEY", "STORED", "ACCESSED", "ACCESSES"
-                );
-                println!("{}", "-".repeat(100));
-            }
             let key: String = row.get(0).context("Failed to read key")?;
             let value: String = row.get(1).context("Failed to read value")?;
             let stored_at: String = row.get(2).context("Failed to read stored_at")?;
             let accessed_at: String = row.get(3).context("Failed to read accessed_at")?;
             let access_count: i64 = row.get(4).context("Failed to read access_count")?;
-            // Truncate value for display — replace newlines with spaces.
-            let joined: String = value.lines().collect::<Vec<_>>().join(" ");
-            let display_value: String = joined.chars().take(80).collect();
-            let display_value = if joined.chars().count() > 80 {
-                format!("{display_value}…")
-            } else {
-                display_value
-            };
+            let display_value: String = value.lines().collect::<Vec<_>>().join(" ");
             println!(
-                "{:<40}  {:<19}  {:<19}  {:>7}  {}",
-                key, stored_at, accessed_at, access_count, display_value
+                "key:       {key}\nstored:    {stored_at}\naccessed:  {accessed_at}\n#accesses: {access_count}",
             );
+            println!("           {}\n", display_value);
             found = true;
         }
         if !found {
