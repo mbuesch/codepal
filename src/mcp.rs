@@ -46,6 +46,69 @@ const MEMORY_MAX_KEY_LEN: usize = 256;
 const MEMORY_MAX_VALUE_LEN: usize = 64 * 1024;
 const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 
+type GrepRanges = (Vec<(usize, usize)>, std::collections::HashSet<usize>);
+
+/// Computes the merged context ranges and match-line index set for a grep over `lines`.
+/// Returns `None` if no lines match.
+fn compute_grep_matches(lines: &[&str], re: &regex::Regex, ctx: usize) -> Option<GrepRanges> {
+    let matching: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| re.is_match(line))
+        .map(|(i, _)| i)
+        .collect();
+    if matching.is_empty() {
+        return None;
+    }
+    let mut ranges: Vec<(usize, usize)> = vec![];
+    for &m in &matching {
+        let start = m.saturating_sub(ctx);
+        let end = (m + ctx).min(lines.len().saturating_sub(1));
+        if let Some(last) = ranges.last_mut()
+            && start <= last.1 + 1
+        {
+            last.1 = last.1.max(end);
+            continue;
+        }
+        ranges.push((start, end));
+    }
+    let match_set = matching.into_iter().collect();
+    Some((ranges, match_set))
+}
+
+/// Formats grep ranges into `out`. Calls `check_limit(is_match, out_len)` after each line;
+/// returns `true` if the limit callback signalled a stop.
+fn format_grep_ranges(
+    lines: &[&str],
+    ranges: &[(usize, usize)],
+    match_set: &std::collections::HashSet<usize>,
+    out: &mut String,
+    mut check_limit: impl FnMut(bool, usize) -> bool,
+) -> bool {
+    let mut first = true;
+    for &(start, end) in ranges {
+        if !first {
+            out.push_str("--\n");
+        }
+        first = false;
+        for (i, line) in lines
+            .iter()
+            .enumerate()
+            .take(end.saturating_add(1))
+            .skip(start)
+        {
+            let nr = i.saturating_add(1);
+            let is_match = match_set.contains(&i);
+            let sep = if is_match { ':' } else { '-' };
+            out.push_str(&format!("{nr}{sep}{line}\n"));
+            if check_limit(is_match, out.len()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn create_mem_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS mem_values (
@@ -299,7 +362,7 @@ impl CodepalServer {
 
 #[tool_router]
 impl CodepalServer {
-    /// **MANDATORY PRIMARY TOOL** for: List directory contents
+    /// List directory contents
     #[tool]
     pub async fn ls(
         &self,
@@ -346,7 +409,7 @@ impl CodepalServer {
         Ok(Json(LsDirResult { entries }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Read contents of arbitrary files
+    /// Read contents of arbitrary files
     #[tool]
     pub async fn read(
         &self,
@@ -405,7 +468,7 @@ impl CodepalServer {
         Ok(lines[start..end].join("\n"))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Regex grep file contents
+    /// Regex grep file contents
     #[tool]
     pub async fn grep(
         &self,
@@ -450,51 +513,12 @@ impl CodepalServer {
             })?;
 
             let lines: Vec<&str> = content.lines().collect();
-            let matching: Vec<usize> = lines
-                .iter()
-                .enumerate()
-                .filter(|(_, line)| re.is_match(line))
-                .map(|(i, _)| i)
-                .collect();
-
-            if matching.is_empty() {
+            let Some((ranges, match_set)) = compute_grep_matches(&lines, &re, ctx) else {
                 return Ok(String::new());
-            }
-
-            let mut ranges: Vec<(usize, usize)> = vec![];
-            for &m in &matching {
-                let start = m.saturating_sub(ctx);
-                let end = (m + ctx).min(lines.len().saturating_sub(1));
-                if let Some(last) = ranges.last_mut()
-                    && start <= last.1 + 1
-                {
-                    last.1 = last.1.max(end);
-                    continue;
-                }
-                ranges.push((start, end));
-            }
-
-            let match_set: std::collections::HashSet<usize> = matching.into_iter().collect();
+            };
 
             let mut result = String::new();
-            let mut first = true;
-            for (start, end) in ranges {
-                if !first {
-                    result.push_str("--\n");
-                }
-                first = false;
-                for (i, line) in lines
-                    .iter()
-                    .enumerate()
-                    .take(end.saturating_add(1))
-                    .skip(start)
-                {
-                    let nr = i.saturating_add(1);
-                    let sep = if match_set.contains(&i) { ':' } else { '-' };
-                    result.push_str(&format!("{nr}{sep}{line}\n"));
-                }
-            }
-
+            format_grep_ranges(&lines, &ranges, &match_set, &mut result, |_, _| false);
             Ok(result)
         } else if meta.is_dir() {
             let dir = path;
@@ -531,61 +555,26 @@ impl CodepalServer {
                 };
 
                 let lines: Vec<&str> = content.lines().collect();
-                let matching: Vec<usize> = lines
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, line)| re.is_match(line))
-                    .map(|(i, _)| i)
-                    .collect();
-
-                if matching.is_empty() {
+                let Some((ranges, match_set)) = compute_grep_matches(&lines, &re, ctx) else {
                     continue;
-                }
-
-                let mut ranges: Vec<(usize, usize)> = vec![];
-                for &m in &matching {
-                    let start = m.saturating_sub(ctx);
-                    let end = (m + ctx).min(lines.len().saturating_sub(1));
-                    if let Some(last) = ranges.last_mut()
-                        && start <= last.1 + 1
-                    {
-                        last.1 = last.1.max(end);
-                        continue;
-                    }
-                    ranges.push((start, end));
-                }
-
-                let match_set: std::collections::HashSet<usize> = matching.into_iter().collect();
+                };
 
                 result.push_str(&format!("=== {} ===\n", file_path.display()));
-                let mut first_range = true;
-                'ranges: for (rstart, rend) in &ranges {
-                    if !first_range {
-                        result.push_str("--\n");
-                    }
-                    first_range = false;
-                    for (i, line) in lines
-                        .iter()
-                        .enumerate()
-                        .take(rend.saturating_add(1))
-                        .skip(*rstart)
-                    {
-                        let nr = i.saturating_add(1);
-                        let sep = if match_set.contains(&i) { ':' } else { '-' };
-                        result.push_str(&format!("{nr}{sep}{line}\n"));
-                        if match_set.contains(&i) {
+                limit_reached = format_grep_ranges(
+                    &lines,
+                    &ranges,
+                    &match_set,
+                    &mut result,
+                    |is_match, out_len| {
+                        if is_match {
                             total_matches += 1;
                             if total_matches >= MAX_GREP_DIR_MATCHES {
-                                limit_reached = true;
-                                break 'ranges;
+                                return true;
                             }
                         }
-                        if result.len() >= MAX_GREP_DIR_RESULT_SIZE {
-                            limit_reached = true;
-                            break 'ranges;
-                        }
-                    }
-                }
+                        out_len >= MAX_GREP_DIR_RESULT_SIZE
+                    },
+                );
                 if limit_reached {
                     break 'files;
                 }
@@ -607,7 +596,7 @@ impl CodepalServer {
         }
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Find files matching a regex pattern in a directory tree
+    /// Find files matching a regex pattern in a directory tree
     #[tool]
     pub async fn find(
         &self,
@@ -663,7 +652,7 @@ impl CodepalServer {
         Ok(Json(FindFilesResult { files }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: List all keys in the memory store
+    /// List all keys in the memory store
     #[tool]
     pub async fn mem_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
         eprintln!("Calling tool: mem_list");
@@ -690,7 +679,7 @@ impl CodepalServer {
         Ok(Json(MemoryListResult { keys }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Store a value in the key-value memory store
+    /// Store a value in the key-value memory store
     #[tool]
     pub async fn mem_store(
         &self,
@@ -778,7 +767,7 @@ impl CodepalServer {
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Load a value from the key-value memory store
+    /// Load a value from the key-value memory store
     #[tool]
     pub async fn mem_load(
         &self,
@@ -835,7 +824,7 @@ impl CodepalServer {
         Ok(Json(MemoryLoadResult { value }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Delete a key from the memory store
+    /// Delete a key from the memory store
     #[tool]
     pub async fn mem_delete(
         &self,
