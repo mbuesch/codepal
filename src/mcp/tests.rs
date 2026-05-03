@@ -14,10 +14,10 @@ async fn make_server(workspace: &Path) -> CodepalServer {
         .expect("server creation failed")
 }
 
-// ---- ls_dir tests ----
+// ---- ls tests ----
 
 #[tokio::test]
-async fn ls_dir_returns_sorted_entries() {
+async fn ls_returns_sorted_entries() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("b.txt"), "").await.unwrap();
     fs::write(dir.path().join("a.txt"), "").await.unwrap();
@@ -25,7 +25,7 @@ async fn ls_dir_returns_sorted_entries() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .ls_dir(Parameters(LsDirParams {
+        .ls(Parameters(LsDirParams {
             path: dir.path().to_str().unwrap().to_string(),
         }))
         .await
@@ -34,14 +34,14 @@ async fn ls_dir_returns_sorted_entries() {
 }
 
 #[tokio::test]
-async fn ls_dir_on_file_errors() {
+async fn ls_on_file_errors() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("file.txt");
     fs::write(&file, "hi").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .ls_dir(Parameters(LsDirParams {
+        .ls(Parameters(LsDirParams {
             path: file.to_str().unwrap().to_string(),
         }))
         .await
@@ -51,13 +51,13 @@ async fn ls_dir_on_file_errors() {
 }
 
 #[tokio::test]
-async fn ls_dir_outside_allowlist_errors() {
+async fn ls_outside_allowlist_errors() {
     let dir = tempfile::tempdir().unwrap();
     let other = tempfile::tempdir().unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .ls_dir(Parameters(LsDirParams {
+        .ls(Parameters(LsDirParams {
             path: other.path().to_str().unwrap().to_string(),
         }))
         .await
@@ -66,17 +66,17 @@ async fn ls_dir_outside_allowlist_errors() {
     assert!(err.message.contains("EPERM"));
 }
 
-// ---- read_file tests ----
+// ---- read tests ----
 
 #[tokio::test]
-async fn read_file_entire_content() {
+async fn read_entire_content() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("hello.txt");
     fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let content = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: None,
             end_line: None,
@@ -87,14 +87,14 @@ async fn read_file_entire_content() {
 }
 
 #[tokio::test]
-async fn read_file_with_start_line() {
+async fn read_with_start_line() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("hello.txt");
     fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let content = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: Some(2),
             end_line: None,
@@ -105,14 +105,14 @@ async fn read_file_with_start_line() {
 }
 
 #[tokio::test]
-async fn read_file_with_end_line() {
+async fn read_with_end_line() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("hello.txt");
     fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let content = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: None,
             end_line: Some(2),
@@ -123,7 +123,7 @@ async fn read_file_with_end_line() {
 }
 
 #[tokio::test]
-async fn read_file_with_line_range() {
+async fn read_with_line_range() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("hello.txt");
     fs::write(&file, "line1\nline2\nline3\nline4\n")
@@ -132,7 +132,7 @@ async fn read_file_with_line_range() {
 
     let server = make_server(dir.path()).await;
     let content = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: Some(2),
             end_line: Some(3),
@@ -143,12 +143,12 @@ async fn read_file_with_line_range() {
 }
 
 #[tokio::test]
-async fn read_file_on_directory_errors() {
+async fn read_on_directory_errors() {
     let dir = tempfile::tempdir().unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: dir.path().to_str().unwrap().to_string(),
             start_line: None,
             end_line: None,
@@ -159,7 +159,7 @@ async fn read_file_on_directory_errors() {
 }
 
 #[tokio::test]
-async fn read_file_too_large_errors() {
+async fn read_too_large_errors() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("big.bin");
     fs::write(&file, vec![b'x'; (READ_FILE_MAX_SIZE + 1) as usize])
@@ -168,7 +168,7 @@ async fn read_file_too_large_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: None,
             end_line: None,
@@ -179,7 +179,7 @@ async fn read_file_too_large_errors() {
 }
 
 #[tokio::test]
-async fn read_file_outside_allowlist_errors() {
+async fn read_outside_allowlist_errors() {
     let dir = tempfile::tempdir().unwrap();
     let other = tempfile::tempdir().unwrap();
     let file = other.path().join("secret.txt");
@@ -187,7 +187,7 @@ async fn read_file_outside_allowlist_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .read_file(Parameters(ReadFileParams {
+        .read(Parameters(ReadFileParams {
             path: file.to_str().unwrap().to_string(),
             start_line: None,
             end_line: None,
@@ -197,7 +197,7 @@ async fn read_file_outside_allowlist_errors() {
     assert!(err.message.contains("EPERM"));
 }
 
-// ---- grep_file tests ----
+// ---- grep (file) tests ----
 
 #[tokio::test]
 async fn grep_file_basic_match() {
@@ -207,7 +207,7 @@ async fn grep_file_basic_match() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "foo".to_string(),
             case_insensitive: None,
@@ -231,7 +231,7 @@ async fn grep_file_case_insensitive() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "hello".to_string(),
             case_insensitive: Some(true),
@@ -253,7 +253,7 @@ async fn grep_file_no_match_returns_empty() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "zzz".to_string(),
             case_insensitive: None,
@@ -273,7 +273,7 @@ async fn grep_file_context_lines() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "match".to_string(),
             case_insensitive: None,
@@ -295,7 +295,7 @@ async fn grep_file_invalid_regex_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "[invalid".to_string(),
             case_insensitive: None,
@@ -316,7 +316,7 @@ async fn grep_file_outside_allowlist_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .grep_file(Parameters(GrepFileParams {
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "secret".to_string(),
             case_insensitive: None,
@@ -328,7 +328,7 @@ async fn grep_file_outside_allowlist_errors() {
     assert!(err.message.contains("EPERM"));
 }
 
-// ---- grep_dir tests ----
+// ---- grep (dir) tests ----
 
 #[tokio::test]
 async fn grep_dir_basic_match() {
@@ -342,7 +342,7 @@ async fn grep_dir_basic_match() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "hello".to_string(),
             case_insensitive: None,
@@ -365,7 +365,7 @@ async fn grep_dir_case_insensitive() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "hello".to_string(),
             case_insensitive: Some(true),
@@ -386,7 +386,7 @@ async fn grep_dir_no_match_returns_empty() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "zzz".to_string(),
             case_insensitive: None,
@@ -407,7 +407,7 @@ async fn grep_dir_context_lines() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "match".to_string(),
             case_insensitive: None,
@@ -427,7 +427,7 @@ async fn grep_dir_invalid_regex_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "[invalid".to_string(),
             case_insensitive: None,
@@ -440,14 +440,14 @@ async fn grep_dir_invalid_regex_errors() {
 }
 
 #[tokio::test]
-async fn grep_dir_on_file_errors() {
+async fn grep_on_file_works() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("file.txt");
     fs::write(&file, "content\n").await.unwrap();
 
     let server = make_server(dir.path()).await;
-    let err = server
-        .grep_dir(Parameters(GrepDirParams {
+    let result = server
+        .grep(Parameters(GrepParams {
             path: file.to_str().unwrap().to_string(),
             pattern: "content".to_string(),
             case_insensitive: None,
@@ -455,8 +455,8 @@ async fn grep_dir_on_file_errors() {
             context_lines: None,
         }))
         .await
-        .unwrap_err();
-    assert!(err.message.contains("Not a directory"));
+        .unwrap();
+    assert!(result.contains("1:content"));
 }
 
 #[tokio::test]
@@ -466,7 +466,7 @@ async fn grep_dir_outside_allowlist_errors() {
 
     let server = make_server(dir.path()).await;
     let err = server
-        .grep_dir(Parameters(GrepDirParams {
+        .grep(Parameters(GrepParams {
             path: other.path().to_str().unwrap().to_string(),
             pattern: "foo".to_string(),
             case_insensitive: None,
@@ -478,10 +478,10 @@ async fn grep_dir_outside_allowlist_errors() {
     assert!(err.message.contains("EPERM"));
 }
 
-// ---- find_files tests ----
+// ---- find tests ----
 
 #[tokio::test]
-async fn find_files_basic() {
+async fn find_basic() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("main.rs"), "").await.unwrap();
     fs::write(dir.path().join("lib.rs"), "").await.unwrap();
@@ -489,7 +489,7 @@ async fn find_files_basic() {
 
     let server = make_server(dir.path()).await;
     let result = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: r"\.rs$".to_string(),
             case_insensitive: Some(false),
@@ -503,13 +503,13 @@ async fn find_files_basic() {
 }
 
 #[tokio::test]
-async fn find_files_case_insensitive_default() {
+async fn find_case_insensitive_default() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("Main.RS"), "").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let result = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: r"\.rs$".to_string(),
             case_insensitive: None, // defaults to true
@@ -520,13 +520,13 @@ async fn find_files_case_insensitive_default() {
 }
 
 #[tokio::test]
-async fn find_files_no_match() {
+async fn find_no_match() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("main.rs"), "").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let result = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: r"\.py$".to_string(),
             case_insensitive: None,
@@ -537,12 +537,12 @@ async fn find_files_no_match() {
 }
 
 #[tokio::test]
-async fn find_files_invalid_regex_errors() {
+async fn find_invalid_regex_errors() {
     let dir = tempfile::tempdir().unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: dir.path().to_str().unwrap().to_string(),
             pattern: "[invalid".to_string(),
             case_insensitive: None,
@@ -554,14 +554,14 @@ async fn find_files_invalid_regex_errors() {
 }
 
 #[tokio::test]
-async fn find_files_on_file_errors() {
+async fn find_on_file_errors() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("file.txt");
     fs::write(&file, "").await.unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: file.to_str().unwrap().to_string(),
             pattern: ".*".to_string(),
             case_insensitive: None,
@@ -573,13 +573,13 @@ async fn find_files_on_file_errors() {
 }
 
 #[tokio::test]
-async fn find_files_outside_allowlist_errors() {
+async fn find_outside_allowlist_errors() {
     let dir = tempfile::tempdir().unwrap();
     let other = tempfile::tempdir().unwrap();
 
     let server = make_server(dir.path()).await;
     let err = server
-        .find_files(Parameters(FindFilesParams {
+        .find(Parameters(FindFilesParams {
             path: other.path().to_str().unwrap().to_string(),
             pattern: ".*".to_string(),
             case_insensitive: None,
@@ -593,12 +593,12 @@ async fn find_files_outside_allowlist_errors() {
 // ---- memory tests ----
 
 #[tokio::test]
-async fn memory_store_and_load_roundtrip() {
+async fn mem_store_and_load_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let store_result = server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["mykey".to_string()],
             value: "myvalue".to_string(),
         }))
@@ -607,7 +607,7 @@ async fn memory_store_and_load_roundtrip() {
     assert!(store_result.0.success);
 
     let load_result = server
-        .memory_load(Parameters(MemoryLoadParams {
+        .mem_load(Parameters(MemoryLoadParams {
             keys: vec!["mykey".to_string()],
         }))
         .await
@@ -616,12 +616,12 @@ async fn memory_store_and_load_roundtrip() {
 }
 
 #[tokio::test]
-async fn memory_load_returns_none_when_empty() {
+async fn mem_load_returns_none_when_empty() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let result = server
-        .memory_load(Parameters(MemoryLoadParams {
+        .mem_load(Parameters(MemoryLoadParams {
             keys: vec!["nonexistent".to_string()],
         }))
         .await
@@ -630,19 +630,19 @@ async fn memory_load_returns_none_when_empty() {
 }
 
 #[tokio::test]
-async fn memory_load_first_key_wins() {
+async fn mem_load_first_key_wins() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["key-a".to_string()],
             value: "value-a".to_string(),
         }))
         .await
         .unwrap();
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["key-b".to_string()],
             value: "value-b".to_string(),
         }))
@@ -650,7 +650,7 @@ async fn memory_load_first_key_wins() {
         .unwrap();
 
     let result = server
-        .memory_load(Parameters(MemoryLoadParams {
+        .mem_load(Parameters(MemoryLoadParams {
             keys: vec!["key-a".to_string(), "key-b".to_string()],
         }))
         .await
@@ -659,12 +659,12 @@ async fn memory_load_first_key_wins() {
 }
 
 #[tokio::test]
-async fn memory_store_empty_keys_errors() {
+async fn mem_store_empty_keys_errors() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let err = server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec![],
             value: "value".to_string(),
         }))
@@ -675,13 +675,13 @@ async fn memory_store_empty_keys_errors() {
 }
 
 #[tokio::test]
-async fn memory_store_too_many_keys_errors() {
+async fn mem_store_too_many_keys_errors() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let keys: Vec<String> = (0..=MEMORY_MAX_KEYS).map(|i| format!("key{i}")).collect();
     let err = server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys,
             value: "value".to_string(),
         }))
@@ -692,13 +692,13 @@ async fn memory_store_too_many_keys_errors() {
 }
 
 #[tokio::test]
-async fn memory_store_key_too_long_errors() {
+async fn mem_store_key_too_long_errors() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let long_key = "k".repeat(MEMORY_MAX_KEY_LEN + 1);
     let err = server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec![long_key],
             value: "value".to_string(),
         }))
@@ -709,13 +709,13 @@ async fn memory_store_key_too_long_errors() {
 }
 
 #[tokio::test]
-async fn memory_store_value_too_long_errors() {
+async fn mem_store_value_too_long_errors() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let long_value = "v".repeat(MEMORY_MAX_VALUE_LEN + 1);
     let err = server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["mykey".to_string()],
             value: long_value,
         }))
@@ -726,19 +726,19 @@ async fn memory_store_value_too_long_errors() {
 }
 
 #[tokio::test]
-async fn memory_store_overwrites_existing() {
+async fn mem_store_overwrites_existing() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["k".to_string()],
             value: "old".to_string(),
         }))
         .await
         .unwrap();
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["k".to_string()],
             value: "new".to_string(),
         }))
@@ -746,7 +746,7 @@ async fn memory_store_overwrites_existing() {
         .unwrap();
 
     let result = server
-        .memory_load(Parameters(MemoryLoadParams {
+        .mem_load(Parameters(MemoryLoadParams {
             keys: vec!["k".to_string()],
         }))
         .await
@@ -755,12 +755,12 @@ async fn memory_store_overwrites_existing() {
 }
 
 #[tokio::test]
-async fn memory_store_multi_key_all_loadable() {
+async fn mem_store_multi_key_all_loadable() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["alpha".to_string(), "beta".to_string()],
             value: "shared".to_string(),
         }))
@@ -769,7 +769,7 @@ async fn memory_store_multi_key_all_loadable() {
 
     for key in ["alpha", "beta"] {
         let result = server
-            .memory_load(Parameters(MemoryLoadParams {
+            .mem_load(Parameters(MemoryLoadParams {
                 keys: vec![key.to_string()],
             }))
             .await
@@ -779,40 +779,40 @@ async fn memory_store_multi_key_all_loadable() {
 }
 
 #[tokio::test]
-async fn memory_list_empty_store() {
+async fn mem_list_empty_store() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
-    let result = server.memory_list().await.unwrap();
+    let result = server.mem_list().await.unwrap();
     assert!(result.0.keys.is_empty());
 }
 
 #[tokio::test]
-async fn memory_list_after_storing() {
+async fn mem_list_after_storing() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["k1".to_string(), "k2".to_string()],
             value: "val".to_string(),
         }))
         .await
         .unwrap();
 
-    let result = server.memory_list().await.unwrap();
+    let result = server.mem_list().await.unwrap();
     let mut keys = result.0.keys.clone();
     keys.sort();
     assert_eq!(keys, vec!["k1", "k2"]);
 }
 
 #[tokio::test]
-async fn memory_delete_existing_key() {
+async fn mem_delete_existing_key() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     server
-        .memory_store(Parameters(MemoryStoreParams {
+        .mem_store(Parameters(MemoryStoreParams {
             keys: vec!["mykey".to_string()],
             value: "myvalue".to_string(),
         }))
@@ -820,7 +820,7 @@ async fn memory_delete_existing_key() {
         .unwrap();
 
     let del_result = server
-        .memory_delete(Parameters(MemoryDeleteParams {
+        .mem_delete(Parameters(MemoryDeleteParams {
             key: "mykey".to_string(),
         }))
         .await
@@ -828,7 +828,7 @@ async fn memory_delete_existing_key() {
     assert!(del_result.0.found);
 
     let load_result = server
-        .memory_load(Parameters(MemoryLoadParams {
+        .mem_load(Parameters(MemoryLoadParams {
             keys: vec!["mykey".to_string()],
         }))
         .await
@@ -837,12 +837,12 @@ async fn memory_delete_existing_key() {
 }
 
 #[tokio::test]
-async fn memory_delete_nonexistent_key() {
+async fn mem_delete_nonexistent_key() {
     let dir = tempfile::tempdir().unwrap();
     let server = make_server(dir.path()).await;
 
     let result = server
-        .memory_delete(Parameters(MemoryDeleteParams {
+        .mem_delete(Parameters(MemoryDeleteParams {
             key: "ghost".to_string(),
         }))
         .await
