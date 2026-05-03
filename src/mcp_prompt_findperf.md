@@ -40,4 +40,6 @@ Your goal is to find code that could be rewritten to run faster or use less memo
   4. **Tradeoffs** (e.g. increased code complexity, hardware dependency, memory increase).
   5. **Severity** of the opportunity: low / medium / high.
 
+Write a detailed report to the file `PERF_HUNT_$DATE.md` where `$DATE` is the current date in `YYYY-MM-DD` format.
+
 Find performance improvement opportunities in:
