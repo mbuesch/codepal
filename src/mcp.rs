@@ -251,14 +251,9 @@ impl CodepalServer {
             let accessed_at: String = row.get(3).context("Failed to read accessed_at")?;
             let access_count: i64 = row.get(4).context("Failed to read access_count")?;
             // Truncate value for display — replace newlines with spaces.
-            let display_value: String = value
-                .lines()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .take(80)
-                .collect();
-            let display_value = if value.len() > display_value.len() {
+            let joined: String = value.lines().collect::<Vec<_>>().join(" ");
+            let display_value: String = joined.chars().take(80).collect();
+            let display_value = if joined.chars().count() > 80 {
                 format!("{display_value}…")
             } else {
                 display_value
@@ -627,7 +622,7 @@ impl CodepalServer {
             .map_err(|e| rmcp::ErrorData::invalid_params(format!("Invalid regex: {e}"), None))?;
 
         let dir_clone = dir.clone();
-        let files: Vec<String> = tokio::task::spawn_blocking(move || {
+        let mut files: Vec<String> = tokio::task::spawn_blocking(move || {
             WalkDir::new(&dir_clone)
                 .follow_links(false)
                 .sort_by_file_name()
@@ -643,11 +638,18 @@ impl CodepalServer {
                         None
                     }
                 })
-                .take(MAX_FIND_FILES)
+                .take(MAX_FIND_FILES + 1)
                 .collect()
         })
         .await
         .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+
+        if files.len() > MAX_FIND_FILES {
+            files.truncate(MAX_FIND_FILES);
+            files.push(format!(
+                "... limit reached ({MAX_FIND_FILES} files), refine pattern ..."
+            ));
+        }
 
         Ok(Json(FindFilesResult { files }))
     }
@@ -738,7 +740,7 @@ impl CodepalServer {
                 |row| row.get(0),
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        // Map every key to that value id, preserving access_count on overwrite.
+        // Map every key to that value id, incrementing access_count on overwrite.
         for key in &keys {
             let exists: bool = conn
                 .query_row(
@@ -764,6 +766,12 @@ impl CodepalServer {
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         }
+        // Clean up values that are no longer referenced by any key.
+        conn.execute(
+            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
+            [],
+        )
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
@@ -792,18 +800,30 @@ impl CodepalServer {
         }
         let mut value = None;
         for key in &keys {
-            let escaped = key
-                .replace('\\', "\\\\")
-                .replace('%', "\\%")
-                .replace('_', "\\_");
+            // Try exact match first to avoid prefix collisions (e.g. "key1" vs "key10").
             let found_key: Option<String> = conn
                 .query_row(
+                    "SELECT m.key FROM memory m WHERE m.key = ?1",
+                    sql::params![key],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            let found_key = if found_key.is_some() {
+                found_key
+            } else {
+                let escaped = key
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                conn.query_row(
                     "SELECT m.key FROM memory m WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.accessed_at DESC LIMIT 1",
                     sql::params![escaped],
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?
+            };
             if let Some(ref fk) = found_key {
                 conn.execute(
                     "UPDATE memory SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?1",
