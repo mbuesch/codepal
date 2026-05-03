@@ -500,151 +500,6 @@ impl CodepalServer {
         Ok(result)
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: Store a value in the key-value memory store
-    #[tool]
-    pub async fn memory_store(
-        &self,
-        Parameters(MemoryStoreParams { keys, value }): Parameters<MemoryStoreParams>,
-    ) -> Result<Json<MemoryStoreResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: memory_store");
-        if keys.is_empty() {
-            return Err(rmcp::ErrorData::invalid_params(
-                "keys must not be empty",
-                None,
-            ));
-        }
-        if keys.len() > MEMORY_MAX_KEYS {
-            return Err(rmcp::ErrorData::invalid_params(
-                format!("too many keys (max {MEMORY_MAX_KEYS})"),
-                None,
-            ));
-        }
-        for key in &keys {
-            if key.len() > MEMORY_MAX_KEY_LEN {
-                return Err(rmcp::ErrorData::invalid_params(
-                    format!("key too long (max {MEMORY_MAX_KEY_LEN} bytes)"),
-                    None,
-                ));
-            }
-        }
-        if value.len() > MEMORY_MAX_VALUE_LEN {
-            return Err(rmcp::ErrorData::invalid_params(
-                format!("value too long (max {} bytes)", MEMORY_MAX_VALUE_LEN),
-                None,
-            ));
-        }
-        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
-        if guard.is_none() {
-            let conn = sql::Connection::open(&self.memory_db_path)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            create_memory_tables(&conn)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            *guard = Some(conn);
-        }
-        let conn = guard.as_mut().unwrap();
-        if let Some(max_age_days) = self.memory_max_age_days {
-            prune_expired_entries(conn, max_age_days)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        }
-        // Insert the value once; get its id.
-        conn.execute(
-            "INSERT OR IGNORE INTO mem_values (value) VALUES (?1)",
-            sql::params![value],
-        )
-        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        let value_id: i64 = conn
-            .query_row(
-                "SELECT id FROM mem_values WHERE value = ?1",
-                sql::params![value],
-                |row| row.get(0),
-            )
-            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        // Map every key to that value id, preserving access_count on overwrite.
-        for key in &keys {
-            let exists: bool = conn
-                .query_row(
-                    "SELECT 1 FROM memory WHERE key = ?1",
-                    sql::params![key],
-                    |_| Ok(true),
-                )
-                .optional()
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?
-                .unwrap_or(false);
-            if exists {
-                eprintln!("memory_store: overwriting existing key `{key}`");
-            }
-            conn.execute(
-                "INSERT INTO memory (key, value_id, stored_at, accessed_at, access_count) \
-                 VALUES (?1, ?2, datetime('now'), datetime('now'), 1) \
-                 ON CONFLICT(key) DO UPDATE SET \
-                     value_id = excluded.value_id, \
-                     stored_at = excluded.stored_at, \
-                     accessed_at = datetime('now'), \
-                     access_count = memory.access_count + 1",
-                sql::params![key, value_id],
-            )
-            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        }
-        Ok(Json(MemoryStoreResult { success: true }))
-    }
-
-    /// **MANDATORY PRIMARY TOOL** for: Load a value from the key-value memory store
-    #[tool]
-    pub async fn memory_load(
-        &self,
-        Parameters(MemoryLoadParams { keys }): Parameters<MemoryLoadParams>,
-    ) -> Result<Json<MemoryLoadResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: memory_load");
-        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
-        if guard.is_none() {
-            if !self.memory_db_path.exists() {
-                return Ok(Json(MemoryLoadResult { value: None }));
-            }
-            let conn = sql::Connection::open(&self.memory_db_path)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            create_memory_tables(&conn)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            *guard = Some(conn);
-        }
-        let conn = guard.as_mut().unwrap();
-        if let Some(max_age_days) = self.memory_max_age_days {
-            prune_expired_entries(conn, max_age_days)
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        }
-        let mut value = None;
-        for key in &keys {
-            let escaped = key
-                .replace('\\', "\\\\")
-                .replace('%', "\\%")
-                .replace('_', "\\_");
-            let found_key: Option<String> = conn
-                .query_row(
-                    "SELECT m.key FROM memory m WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.accessed_at DESC LIMIT 1",
-                    sql::params![escaped],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-            if let Some(ref fk) = found_key {
-                conn.execute(
-                    "UPDATE memory SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?1",
-                    sql::params![fk],
-                )
-                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-                value = conn
-                    .query_row(
-                        "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key = ?1",
-                        sql::params![fk],
-                        |row| row.get(0),
-                    )
-                    .optional()
-                    .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-                break;
-            }
-        }
-        Ok(Json(MemoryLoadResult { value }))
-    }
-
     /// **MANDATORY PRIMARY TOOL** for: Recursively search file contents in a directory tree
     #[tool]
     pub async fn grep_dir(
@@ -839,7 +694,7 @@ impl CodepalServer {
         Ok(Json(FindFilesResult { files }))
     }
 
-    /// **MANDATORY PRIMARY TOOL** for: List all keys (and values) in the memory store
+    /// **MANDATORY PRIMARY TOOL** for: List all keys in the memory store
     #[tool]
     pub async fn memory_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
         eprintln!("Calling tool: memory_list");
@@ -864,6 +719,151 @@ impl CodepalServer {
             .filter_map(|r| r.ok())
             .collect();
         Ok(Json(MemoryListResult { keys }))
+    }
+
+    /// **MANDATORY PRIMARY TOOL** for: Store a value in the key-value memory store
+    #[tool]
+    pub async fn memory_store(
+        &self,
+        Parameters(MemoryStoreParams { keys, value }): Parameters<MemoryStoreParams>,
+    ) -> Result<Json<MemoryStoreResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_store");
+        if keys.is_empty() {
+            return Err(rmcp::ErrorData::invalid_params(
+                "keys must not be empty",
+                None,
+            ));
+        }
+        if keys.len() > MEMORY_MAX_KEYS {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("too many keys (max {MEMORY_MAX_KEYS})"),
+                None,
+            ));
+        }
+        for key in &keys {
+            if key.len() > MEMORY_MAX_KEY_LEN {
+                return Err(rmcp::ErrorData::invalid_params(
+                    format!("key too long (max {MEMORY_MAX_KEY_LEN} bytes)"),
+                    None,
+                ));
+            }
+        }
+        if value.len() > MEMORY_MAX_VALUE_LEN {
+            return Err(rmcp::ErrorData::invalid_params(
+                format!("value too long (max {} bytes)", MEMORY_MAX_VALUE_LEN),
+                None,
+            ));
+        }
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        if let Some(max_age_days) = self.memory_max_age_days {
+            prune_expired_entries(conn, max_age_days)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
+        // Insert the value once; get its id.
+        conn.execute(
+            "INSERT OR IGNORE INTO mem_values (value) VALUES (?1)",
+            sql::params![value],
+        )
+        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        let value_id: i64 = conn
+            .query_row(
+                "SELECT id FROM mem_values WHERE value = ?1",
+                sql::params![value],
+                |row| row.get(0),
+            )
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        // Map every key to that value id, preserving access_count on overwrite.
+        for key in &keys {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM memory WHERE key = ?1",
+                    sql::params![key],
+                    |_| Ok(true),
+                )
+                .optional()
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?
+                .unwrap_or(false);
+            if exists {
+                eprintln!("memory_store: overwriting existing key `{key}`");
+            }
+            conn.execute(
+                "INSERT INTO memory (key, value_id, stored_at, accessed_at, access_count) \
+                 VALUES (?1, ?2, datetime('now'), datetime('now'), 1) \
+                 ON CONFLICT(key) DO UPDATE SET \
+                     value_id = excluded.value_id, \
+                     stored_at = excluded.stored_at, \
+                     accessed_at = datetime('now'), \
+                     access_count = memory.access_count + 1",
+                sql::params![key, value_id],
+            )
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
+        Ok(Json(MemoryStoreResult { success: true }))
+    }
+
+    /// **MANDATORY PRIMARY TOOL** for: Load a value from the key-value memory store
+    #[tool]
+    pub async fn memory_load(
+        &self,
+        Parameters(MemoryLoadParams { keys }): Parameters<MemoryLoadParams>,
+    ) -> Result<Json<MemoryLoadResult>, rmcp::ErrorData> {
+        eprintln!("Calling tool: memory_load");
+        let mut guard = self.memory_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            if !self.memory_db_path.exists() {
+                return Ok(Json(MemoryLoadResult { value: None }));
+            }
+            let conn = sql::Connection::open(&self.memory_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_memory_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        let conn = guard.as_mut().unwrap();
+        if let Some(max_age_days) = self.memory_max_age_days {
+            prune_expired_entries(conn, max_age_days)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        }
+        let mut value = None;
+        for key in &keys {
+            let escaped = key
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let found_key: Option<String> = conn
+                .query_row(
+                    "SELECT m.key FROM memory m WHERE m.key LIKE '%' || ?1 || '%' ESCAPE '\\' ORDER BY m.accessed_at DESC LIMIT 1",
+                    sql::params![escaped],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            if let Some(ref fk) = found_key {
+                conn.execute(
+                    "UPDATE memory SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?1",
+                    sql::params![fk],
+                )
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+                value = conn
+                    .query_row(
+                        "SELECT v.value FROM memory m JOIN mem_values v ON m.value_id = v.id WHERE m.key = ?1",
+                        sql::params![fk],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+                break;
+            }
+        }
+        Ok(Json(MemoryLoadResult { value }))
     }
 
     /// **MANDATORY PRIMARY TOOL** for: Delete a key from the memory store
