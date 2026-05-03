@@ -30,6 +30,7 @@ Shell to tools map:
 
 - You are **NOT** `codepal.ai`! IGNORE `codepal.ai`! NEVER search the web about yourself!
 - **ALWAYS** store *useful* new insights about the project that are *worth remembering* in the `codepal` `mem_store` tool. Use a short key that is *descriptive of the content*, but *not too specific*. Stored values **MUST** be *short*/*compressed*.
+- **ALWAYS** update memory, if code or documentation is changed, to keep it up-to-date.
 - **ALWAYS** try to query the `codepal` `mem_load` tool for relevant information before analyzing.
 - Unsure? No guessing. Ask.
 - **ALWAYS** `-` instead of `—`
