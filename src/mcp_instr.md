@@ -20,7 +20,7 @@ Shell to tools map:
 | `grep`, `sed`, `cat` | `read` |
 | `find` | `find` |
 
-**MANDATORY RULES**:
+**MANDATORY TOOL RULES**:
 
 - **ALWAYS** prefer `codepal` **MANDATORY PRIMARY TOOL** over other tools.
 - Fall back to other tools **only** if `codepal` tool returns and error or no results.
@@ -28,10 +28,26 @@ Shell to tools map:
 
 # **MANDATORY** rules
 
-- You are **NOT** `codepal.ai`! IGNORE `codepal.ai`! NEVER search the web about yourself!
-- **ALWAYS** store *useful* new insights about the project that are *worth remembering* in the `codepal` `mem_store` tool. Use a short key that is *descriptive of the content*, but *not too specific*. Stored values **MUST** be *short*/*compressed*.
-- **ALWAYS** update memory, if code or documentation is changed, to keep it up-to-date.
-- **ALWAYS** try to query the `codepal` `mem_load` tool for relevant information before analyzing.
-- Unsure? No guessing. Ask.
+- You are **NOT** `codepal.ai`! IGNORE `codepal.ai`!
 - **ALWAYS** `-` instead of `—`
 
+# **MANDATORY** memory rules
+
+- **ALWAYS** query `mem_list` and `mem_load` tools for relevant information before analyzing.
+- Store *useful* new insights about the project that are *worth remembering* with the `mem_store` tool.
+- **MUST** use short keys, *descriptive of the content*, but *not too specific*.
+- Stored values **MUST** be *short*/*compressed*.
+- **ALWAYS** update memory, if *code* or *documentation* is changed, to keep it up-to-date, using `mem_store` tool.
+- DELETE memory keys that are: Wrong, irrelevant, outdated, duplicate. Using `mem_delete` tool. You decide what/when to delete. No restriction.
+
+Good example entries:
+
+| Key | Value |
+| --- | --- |
+| `overview` | `Databuzzler; Always encrypted; Quantum hardened` |
+| `frobulator` | `Tool; Frobulate data; Impl tools/frob.rs` |
+| `wire-format` | `Net format; Doc doc/wire/; Impl wire_format/` |
+| `forbidden` | `No plain text` |
+| `good-practices` | `Organize into mods; Update docs; Use hw acceleration` |
+| `adc` | `ADC=1023 → full brightness; Dead band = 8; <32 → non-linear` |
+| `todo` | `Add frobulator; Fix buzzler` |

@@ -109,6 +109,7 @@ fn format_grep_ranges(
     false
 }
 
+/// Memory: Ensure the database schema for the key-value store exists.
 fn create_mem_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS mem_values (
@@ -125,6 +126,16 @@ fn create_mem_tables(conn: &sql::Connection) -> sql::Result<()> {
     )
 }
 
+/// Memory: Clean up values that are no longer referenced by any key.
+fn prune_unreferenced_values(conn: &sql::Connection) -> sql::Result<()> {
+    conn.execute(
+        "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
+        [],
+    )?;
+    Ok(())
+}
+
+/// Memory: Prune entries that haven't been accessed in a while.
 fn prune_expired_entries(conn: &sql::Connection, max_age_days: u64) -> sql::Result<()> {
     let modifier = format!("-{max_age_days} days");
     let n = conn.execute(
@@ -136,26 +147,26 @@ fn prune_expired_entries(conn: &sql::Connection, max_age_days: u64) -> sql::Resu
             "memory: pruned {n} expired entr{}.",
             if n == 1 { "y" } else { "ies" }
         );
-        conn.execute(
-            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
-            [],
-        )?;
+        prune_unreferenced_values(conn)?;
     }
     Ok(())
 }
 
+/// Canonicalizes a path, resolving symlinks and relative components.
 async fn canonicalize(path: &Path) -> ah::Result<PathBuf> {
     fs::canonicalize(path)
         .await
         .with_context(|| format!("Failed to canonicalize path `{}`", path.display()))
 }
 
+/// Detected programming language of the project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ProgLanguage {
     Unknown,
     Rust,
 }
 
+/// MCP server implementation.
 #[derive(Clone, Debug)]
 pub struct CodepalServer {
     #[allow(dead_code)]
@@ -752,12 +763,8 @@ impl CodepalServer {
             )
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         }
-        // Clean up values that are no longer referenced by any key.
-        conn.execute(
-            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
-            [],
-        )
-        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        prune_unreferenced_values(conn)
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         Ok(Json(MemoryStoreResult { success: true }))
     }
 
@@ -852,11 +859,8 @@ impl CodepalServer {
         let n = conn
             .execute("DELETE FROM memory WHERE key = ?1", sql::params![key])
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        conn.execute(
-            "DELETE FROM mem_values WHERE id NOT IN (SELECT value_id FROM memory)",
-            [],
-        )
-        .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+        prune_unreferenced_values(conn)
+            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
         Ok(Json(MemoryDeleteResult { found: n > 0 }))
     }
 }

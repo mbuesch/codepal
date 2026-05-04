@@ -26,7 +26,7 @@ pub struct Opts {
     pub enable_compressed: bool,
 
     /// Dump memory store contents to stdout and exit.
-    #[arg(long)]
+    #[arg(long, short = 'D')]
     pub dump_memory: bool,
 
     /// Prune memory entries not accessed for longer than this many days.
