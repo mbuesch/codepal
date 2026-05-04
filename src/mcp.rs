@@ -6,7 +6,10 @@ use crate::{
         MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptFindBugs, PromptFindPerf,
         PromptRefactor, PromptSecAudit, ReadFileParams,
     },
-    mcp::tools::{fs::common::canonicalize, mem::common::create_mem_tables},
+    mcp::tools::{
+        fs::common::canonicalize,
+        mem::common::{MEMORY_DB_FILENAME, create_mem_tables},
+    },
 };
 use anyhow::{self as ah, Context as _, format_err as err};
 use rmcp::{
@@ -32,11 +35,6 @@ use std::{
 
 mod structs;
 mod tools;
-
-pub(crate) const MEMORY_MAX_KEYS: usize = 64;
-pub(crate) const MEMORY_MAX_KEY_LEN: usize = 256;
-pub(crate) const MEMORY_MAX_VALUE_LEN: usize = 64 * 1024;
-const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
 
 /// Detected programming language of the project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]

@@ -1,5 +1,10 @@
 use rusqlite as sql;
 
+pub const MEMORY_MAX_KEYS: usize = 64;
+pub const MEMORY_MAX_KEY_LEN: usize = 256;
+pub const MEMORY_MAX_VALUE_LEN: usize = 64 * 1024;
+pub const MEMORY_DB_FILENAME: &str = ".agents-codepal-memory.sqlite";
+
 /// Memory: Ensure the database schema for the key-value store exists.
 pub fn create_mem_tables(conn: &sql::Connection) -> sql::Result<()> {
     conn.execute_batch(
