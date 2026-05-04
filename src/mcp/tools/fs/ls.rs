@@ -1,5 +1,6 @@
+use super::common::MAX_DIR_ENTRIES;
 use crate::mcp::{
-    CodepalServer, MAX_DIR_ENTRIES,
+    CodepalServer,
     structs::{LsDirParams, LsDirResult},
 };
 use tokio::fs;

@@ -1,5 +1,6 @@
+use super::common::MAX_FIND_FILES;
 use crate::mcp::{
-    CodepalServer, MAX_FIND_FILES,
+    CodepalServer,
     structs::{FindFilesParams, FindFilesResult},
 };
 use tokio::fs;
