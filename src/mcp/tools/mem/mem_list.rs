@@ -1,4 +1,5 @@
-use crate::mcp::{CodepalServer, create_mem_tables, structs::MemoryListResult};
+use super::common::create_mem_tables;
+use crate::mcp::{CodepalServer, structs::MemoryListResult};
 use rusqlite as sql;
 
 pub async fn mem_list(server: &CodepalServer) -> Result<MemoryListResult, rmcp::ErrorData> {

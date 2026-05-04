@@ -1,5 +1,6 @@
+use super::common::{create_mem_tables, prune_unreferenced_values};
 use crate::mcp::{
-    CodepalServer, create_mem_tables, prune_unreferenced_values,
+    CodepalServer,
     structs::{MemoryDeleteParams, MemoryDeleteResult},
 };
 use rusqlite as sql;

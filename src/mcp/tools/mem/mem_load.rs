@@ -1,5 +1,6 @@
+use super::common::{create_mem_tables, prune_expired_entries};
 use crate::mcp::{
-    CodepalServer, create_mem_tables, prune_expired_entries,
+    CodepalServer,
     structs::{MemoryLoadParams, MemoryLoadResult},
 };
 use rusqlite::{self as sql, OptionalExtension as _};
