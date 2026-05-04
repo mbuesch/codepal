@@ -1,6 +1,18 @@
 use super::common::READ_FILE_MAX_SIZE;
-use crate::mcp::{CodepalServer, structs::ReadFileParams};
+use crate::mcp::CodepalServer;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use tokio::fs;
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct ReadFileParams {
+    #[schemars(description = "Path of file to read")]
+    pub path: String,
+    #[schemars(description = "Optional: No line before, 1-based inclusive")]
+    pub start_line: Option<u32>,
+    #[schemars(description = "Optional: No line after, 1-based inclusive")]
+    pub end_line: Option<u32>,
+}
 
 pub async fn read(
     server: &CodepalServer,
@@ -57,24 +69,8 @@ pub async fn read(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Opts;
     use rmcp::handler::server::wrapper::Parameters;
-    use std::path::Path;
     use tokio::fs;
-
-    async fn make_server(workspace: &Path) -> CodepalServer {
-        let opts = Opts {
-            workspace: workspace.to_path_buf(),
-            read_path_allow_list: vec![],
-            no_auto_path_allow: false,
-            enable_compressed: false,
-            dump_memory: false,
-            memory_max_age_days: None,
-        };
-        CodepalServer::new(&opts)
-            .await
-            .expect("server creation failed")
-    }
 
     #[tokio::test]
     async fn read_entire_content() {
@@ -82,7 +78,7 @@ mod tests {
         let file = dir.path().join("hello.txt");
         fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let content = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),
@@ -100,7 +96,7 @@ mod tests {
         let file = dir.path().join("hello.txt");
         fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let content = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),
@@ -118,7 +114,7 @@ mod tests {
         let file = dir.path().join("hello.txt");
         fs::write(&file, "line1\nline2\nline3\n").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let content = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),
@@ -138,7 +134,7 @@ mod tests {
             .await
             .unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let content = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),
@@ -154,7 +150,7 @@ mod tests {
     async fn read_on_directory_errors() {
         let dir = tempfile::tempdir().unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .read(Parameters(ReadFileParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -174,7 +170,7 @@ mod tests {
             .await
             .unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),
@@ -193,7 +189,7 @@ mod tests {
         let file = other.path().join("secret.txt");
         fs::write(&file, "secret").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .read(Parameters(ReadFileParams {
                 path: file.to_str().unwrap().to_string(),

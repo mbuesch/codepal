@@ -1,10 +1,25 @@
 use super::common::MAX_FIND_FILES;
-use crate::mcp::{
-    CodepalServer,
-    structs::{FindFilesParams, FindFilesResult},
-};
+use crate::mcp::CodepalServer;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use walkdir::WalkDir;
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct FindFilesParams {
+    #[schemars(description = "Path of directory to search recursively")]
+    pub path: String,
+    #[schemars(description = "Regex pattern to match against relative file paths")]
+    pub pattern: String,
+    #[schemars(description = "Optional: Case insensitive (default: true)")]
+    pub case_insensitive: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct FindFilesResult {
+    #[schemars(description = "Matching absolute file paths")]
+    pub files: Vec<String>,
+}
 
 pub async fn find(
     server: &CodepalServer,
@@ -65,23 +80,7 @@ pub async fn find(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Opts;
     use rmcp::handler::server::wrapper::Parameters;
-    use std::path::Path;
-
-    async fn make_server(workspace: &Path) -> CodepalServer {
-        let opts = Opts {
-            workspace: workspace.to_path_buf(),
-            read_path_allow_list: vec![],
-            no_auto_path_allow: false,
-            enable_compressed: false,
-            dump_memory: false,
-            memory_max_age_days: None,
-        };
-        CodepalServer::new(&opts)
-            .await
-            .expect("server creation failed")
-    }
 
     #[tokio::test]
     async fn find_basic() {
@@ -90,7 +89,7 @@ mod tests {
         fs::write(dir.path().join("lib.rs"), "").await.unwrap();
         fs::write(dir.path().join("readme.txt"), "").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let result = server
             .find(Parameters(FindFilesParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -110,7 +109,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Main.RS"), "").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let result = server
             .find(Parameters(FindFilesParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -127,7 +126,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("main.rs"), "").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let result = server
             .find(Parameters(FindFilesParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -143,7 +142,7 @@ mod tests {
     async fn find_invalid_regex_errors() {
         let dir = tempfile::tempdir().unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .find(Parameters(FindFilesParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -162,7 +161,7 @@ mod tests {
         let file = dir.path().join("file.txt");
         fs::write(&file, "").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .find(Parameters(FindFilesParams {
                 path: file.to_str().unwrap().to_string(),
@@ -180,7 +179,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .find(Parameters(FindFilesParams {
                 path: other.path().to_str().unwrap().to_string(),

@@ -1,14 +1,20 @@
 use crate::{
     Opts,
-    mcp::structs::{
-        FindFilesParams, FindFilesResult, GrepParams, LsDirParams, LsDirResult, MemoryDeleteParams,
-        MemoryDeleteResult, MemoryListResult, MemoryLoadParams, MemoryLoadResult,
-        MemoryStoreParams, MemoryStoreResult, PromptDoit, PromptFindBugs, PromptFindPerf,
-        PromptRefactor, PromptSecAudit, ReadFileParams,
-    },
     mcp::tools::{
-        fs::common::canonicalize,
-        mem::common::{MEMORY_DB_FILENAME, create_mem_tables},
+        fs::{
+            common::canonicalize,
+            find::{FindFilesParams, FindFilesResult},
+            grep::GrepParams,
+            ls::{LsDirParams, LsDirResult},
+            read::ReadFileParams,
+        },
+        mem::{
+            common::{MEMORY_DB_FILENAME, create_mem_tables},
+            mem_delete::{MemoryDeleteParams, MemoryDeleteResult},
+            mem_list::MemoryListResult,
+            mem_load::{MemoryLoadParams, MemoryLoadResult},
+            mem_store::{MemoryStoreParams, MemoryStoreResult},
+        },
     },
 };
 use anyhow::{self as ah, Context as _, format_err as err};
@@ -28,12 +34,13 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use rusqlite::{self as sql};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-mod structs;
 mod tools;
 
 /// Detected programming language of the project.
@@ -158,6 +165,92 @@ impl CodepalServer {
             Err(err!("EPERM"))
         }
     }
+
+    /// Opens or creates the memory DB, then calls `f` with the connection.
+    pub(crate) fn with_mem_conn<T>(
+        &self,
+        f: impl FnOnce(&mut sql::Connection) -> Result<T, rmcp::ErrorData>,
+    ) -> Result<T, rmcp::ErrorData> {
+        let mut guard = self.mem_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            let conn = sql::Connection::open(&self.mem_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_mem_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        f(guard.as_mut().unwrap())
+    }
+
+    /// Opens the memory DB if the file exists, then calls `f` with the connection.
+    /// Returns `default` without calling `f` when the DB file is not yet present.
+    pub(crate) fn with_mem_conn_if_exists<T>(
+        &self,
+        default: T,
+        f: impl FnOnce(&mut sql::Connection) -> Result<T, rmcp::ErrorData>,
+    ) -> Result<T, rmcp::ErrorData> {
+        let mut guard = self.mem_db_conn.lock().expect("Lock poisoned");
+        if guard.is_none() {
+            if !self.mem_db_path.exists() {
+                return Ok(default);
+            }
+            let conn = sql::Connection::open(&self.mem_db_path)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            create_mem_tables(&conn)
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            *guard = Some(conn);
+        }
+        f(guard.as_mut().unwrap())
+    }
+
+    pub(crate) fn mem_max_age_days(&self) -> Option<u64> {
+        self.mem_max_age_days
+    }
+}
+
+#[cfg(test)]
+pub(crate) async fn make_test_server(workspace: &std::path::Path) -> CodepalServer {
+    let opts = crate::Opts {
+        workspace: workspace.to_path_buf(),
+        read_path_allow_list: vec![],
+        no_auto_path_allow: false,
+        enable_compressed: false,
+        dump_memory: false,
+        memory_max_age_days: None,
+    };
+    CodepalServer::new(&opts)
+        .await
+        .expect("server creation failed")
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptDoit {
+    #[schemars(description = "Instructions for CodePal to execute")]
+    pub instructions: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptSecAudit {
+    #[schemars(description = "What to perform the security audit on")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptFindBugs {
+    #[schemars(description = "What to find bugs in")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptFindPerf {
+    #[schemars(description = "What to find performance improvements in")]
+    pub what: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PromptRefactor {
+    #[schemars(description = "What to refactor")]
+    pub what: String,
 }
 
 const PROMPT_PREFIX: &str = include_str!("mcp_prompt_prefix.md");

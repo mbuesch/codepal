@@ -1,9 +1,20 @@
 use super::common::MAX_DIR_ENTRIES;
-use crate::mcp::{
-    CodepalServer,
-    structs::{LsDirParams, LsDirResult},
-};
+use crate::mcp::CodepalServer;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use tokio::fs;
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct LsDirParams {
+    #[schemars(description = "Path of directory to list")]
+    pub path: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct LsDirResult {
+    #[schemars(description = "Directory listing")]
+    pub entries: Vec<String>,
+}
 
 pub async fn ls(
     server: &CodepalServer,
@@ -51,24 +62,8 @@ pub async fn ls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Opts;
     use rmcp::handler::server::wrapper::Parameters;
-    use std::path::Path;
     use tokio::fs;
-
-    async fn make_server(workspace: &Path) -> CodepalServer {
-        let opts = Opts {
-            workspace: workspace.to_path_buf(),
-            read_path_allow_list: vec![],
-            no_auto_path_allow: false,
-            enable_compressed: false,
-            dump_memory: false,
-            memory_max_age_days: None,
-        };
-        CodepalServer::new(&opts)
-            .await
-            .expect("server creation failed")
-    }
 
     #[tokio::test]
     async fn ls_returns_sorted_entries() {
@@ -77,7 +72,7 @@ mod tests {
         fs::write(dir.path().join("a.txt"), "").await.unwrap();
         fs::create_dir(dir.path().join("subdir")).await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let result = server
             .ls(Parameters(LsDirParams {
                 path: dir.path().to_str().unwrap().to_string(),
@@ -93,7 +88,7 @@ mod tests {
         let file = dir.path().join("file.txt");
         fs::write(&file, "hi").await.unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .ls(Parameters(LsDirParams {
                 path: file.to_str().unwrap().to_string(),
@@ -109,7 +104,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
 
-        let server = make_server(dir.path()).await;
+        let server = crate::mcp::make_test_server(dir.path()).await;
         let err = server
             .ls(Parameters(LsDirParams {
                 path: other.path().to_str().unwrap().to_string(),
