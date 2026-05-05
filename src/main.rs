@@ -9,7 +9,7 @@ mod mcp;
 #[command(author, version, about = "Codepal MCP server")]
 pub struct Opts {
     /// Path to the project workspace root.
-    #[arg(long, short = 'w', value_name = "PATH")]
+    #[arg(long, short = 'w', value_name = "PATH", default_value = ".")]
     pub workspace: PathBuf,
 
     /// Allowed path prefixes. Only files under these paths may be read.
