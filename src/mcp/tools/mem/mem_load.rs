@@ -20,6 +20,7 @@ pub async fn mem_load(
     server: &CodepalServer,
     params: MemoryLoadParams,
 ) -> Result<MemoryLoadResult, rmcp::ErrorData> {
+    eprintln!("tool: mem_load(keys={:?})", params.keys);
     server.with_mem_conn_if_exists(MemoryLoadResult { value: None }, |conn| {
         if let Some(max_age_days) = server.mem_max_age_days() {
             prune_expired_entries(conn, max_age_days)

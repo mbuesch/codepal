@@ -9,6 +9,7 @@ pub struct MemoryListResult {
 }
 
 pub async fn mem_list(server: &CodepalServer) -> Result<MemoryListResult, rmcp::ErrorData> {
+    eprintln!("tool: mem_list()");
     server.with_mem_conn_if_exists(MemoryListResult { keys: vec![] }, |conn| {
         let mut stmt = conn
             .prepare("SELECT key FROM memory ORDER BY accessed_at DESC")

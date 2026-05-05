@@ -26,6 +26,13 @@ pub struct GrepParams {
 }
 
 pub async fn grep(server: &CodepalServer, params: GrepParams) -> Result<String, rmcp::ErrorData> {
+    let case_insensitive = params.case_insensitive.unwrap_or(false);
+    let dot_matches_newline = params.dot_matches_newline.unwrap_or(false);
+    let context_lines = params.context_lines.unwrap_or(0);
+    eprintln!(
+        "tool: grep(path={} pattern={} case_insensitive={} dot_matches_newline={} context_lines={})",
+        params.path, params.pattern, case_insensitive, dot_matches_newline, context_lines
+    );
     let path = server
         .path_check_allowed(params.path.into())
         .await
@@ -35,12 +42,12 @@ pub async fn grep(server: &CodepalServer, params: GrepParams) -> Result<String, 
     })?;
 
     let re = regex::RegexBuilder::new(&params.pattern)
-        .case_insensitive(params.case_insensitive.unwrap_or(false))
-        .dot_matches_new_line(params.dot_matches_newline.unwrap_or(false))
+        .case_insensitive(case_insensitive)
+        .dot_matches_new_line(dot_matches_newline)
         .build()
         .map_err(|e| rmcp::ErrorData::invalid_params(format!("Invalid regex: {e}"), None))?;
 
-    let ctx = params.context_lines.unwrap_or(0) as usize;
+    let ctx = context_lines as usize;
 
     if meta.is_file() {
         if meta.len() > READ_FILE_MAX_SIZE {

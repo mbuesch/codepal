@@ -25,6 +25,7 @@ pub async fn mem_store(
     server: &CodepalServer,
     params: MemoryStoreParams,
 ) -> Result<MemoryStoreResult, rmcp::ErrorData> {
+    eprintln!("tool: mem_store(keys={:?})", params.keys);
     if params.keys.is_empty() {
         return Err(rmcp::ErrorData::invalid_params(
             "keys must not be empty",

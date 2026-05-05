@@ -6,30 +6,34 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub struct MemoryDeleteParams {
-    #[schemars(description = "Key to delete from the memory store")]
-    pub key: String,
+    #[schemars(description = "Keys to delete from the memory store")]
+    pub keys: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub struct MemoryDeleteResult {
-    #[schemars(description = "Whether the key existed and was deleted")]
-    pub found: bool,
+    #[schemars(description = "Keys that were deleted from the memory store")]
+    pub keys: Vec<String>,
 }
 
 pub async fn mem_delete(
     server: &CodepalServer,
     params: MemoryDeleteParams,
 ) -> Result<MemoryDeleteResult, rmcp::ErrorData> {
-    server.with_mem_conn_if_exists(MemoryDeleteResult { found: false }, |conn| {
-        let n = conn
-            .execute(
-                "DELETE FROM memory WHERE key = ?1",
-                sql::params![params.key],
-            )
-            .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+    eprintln!("tool: mem_delete(keys={:?})", params.keys);
+    server.with_mem_conn_if_exists(MemoryDeleteResult { keys: Vec::new() }, |conn| {
+        let mut deleted_keys = Vec::new();
+        for key in params.keys {
+            let n = conn
+                .execute("DELETE FROM memory WHERE key = ?1", sql::params![key])
+                .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
+            if n > 0 {
+                deleted_keys.push(key);
+            }
+        }
         prune_unreferenced_values(conn)
             .map_err(|e| rmcp::ErrorData::invalid_params(e.to_string(), None))?;
-        Ok(MemoryDeleteResult { found: n > 0 })
+        Ok(MemoryDeleteResult { keys: deleted_keys })
     })
 }
 
@@ -54,11 +58,11 @@ mod tests {
 
         let del_result = server
             .mem_delete(Parameters(MemoryDeleteParams {
-                key: "mykey".to_string(),
+                keys: vec!["mykey".to_string()],
             }))
             .await
             .unwrap();
-        assert!(del_result.0.found);
+        assert!(del_result.0.keys.contains(&"mykey".to_string()));
 
         let load_result = server
             .mem_load(Parameters(MemoryLoadParams {
@@ -76,10 +80,10 @@ mod tests {
 
         let result = server
             .mem_delete(Parameters(MemoryDeleteParams {
-                key: "ghost".to_string(),
+                keys: vec!["ghost".to_string()],
             }))
             .await
             .unwrap();
-        assert!(!result.0.found);
+        assert!(result.0.keys.is_empty());
     }
 }

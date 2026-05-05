@@ -18,6 +18,10 @@ pub async fn read(
     server: &CodepalServer,
     params: ReadFileParams,
 ) -> Result<String, rmcp::ErrorData> {
+    eprintln!(
+        "tool: read(path={} start_line={:?} end_line={:?})",
+        params.path, params.start_line, params.end_line
+    );
     let path = server
         .path_check_allowed(params.path.into())
         .await

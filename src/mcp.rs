@@ -340,7 +340,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<LsDirParams>,
     ) -> Result<Json<LsDirResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: ls");
         tools::fs::ls::ls(self, params).await.map(Json)
     }
 
@@ -350,7 +349,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<ReadFileParams>,
     ) -> Result<String, rmcp::ErrorData> {
-        eprintln!("Calling tool: read");
         tools::fs::read::read(self, params).await
     }
 
@@ -360,7 +358,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<GrepParams>,
     ) -> Result<String, rmcp::ErrorData> {
-        eprintln!("Calling tool: grep");
         tools::fs::grep::grep(self, params).await
     }
 
@@ -370,14 +367,12 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<FindFilesParams>,
     ) -> Result<Json<FindFilesResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: find");
         tools::fs::find::find(self, params).await.map(Json)
     }
 
     /// **MANDATORY PRIMARY TOOL**: List all keys in the memory store
     #[tool]
     pub async fn mem_list(&self) -> Result<Json<MemoryListResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: mem_list");
         tools::mem::mem_list::mem_list(self).await.map(Json)
     }
 
@@ -387,7 +382,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<MemoryStoreParams>,
     ) -> Result<Json<MemoryStoreResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: mem_store");
         tools::mem::mem_store::mem_store(self, params)
             .await
             .map(Json)
@@ -399,7 +393,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<MemoryLoadParams>,
     ) -> Result<Json<MemoryLoadResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: mem_load");
         tools::mem::mem_load::mem_load(self, params).await.map(Json)
     }
 
@@ -409,7 +402,6 @@ impl CodepalServer {
         &self,
         Parameters(params): Parameters<MemoryDeleteParams>,
     ) -> Result<Json<MemoryDeleteResult>, rmcp::ErrorData> {
-        eprintln!("Calling tool: mem_delete");
         tools::mem::mem_delete::mem_delete(self, params)
             .await
             .map(Json)

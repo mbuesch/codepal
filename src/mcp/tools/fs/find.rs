@@ -25,6 +25,11 @@ pub async fn find(
     server: &CodepalServer,
     params: FindFilesParams,
 ) -> Result<FindFilesResult, rmcp::ErrorData> {
+    let case_insensitive = params.case_insensitive.unwrap_or(true);
+    eprintln!(
+        "tool: find(path={} pattern={} case_insensitive={})",
+        params.path, params.pattern, case_insensitive
+    );
     let dir = server
         .path_check_allowed(params.path.into())
         .await
@@ -40,7 +45,7 @@ pub async fn find(
     }
 
     let re = regex::RegexBuilder::new(&params.pattern)
-        .case_insensitive(params.case_insensitive.unwrap_or(true))
+        .case_insensitive(case_insensitive)
         .build()
         .map_err(|e| rmcp::ErrorData::invalid_params(format!("Invalid regex: {e}"), None))?;
 

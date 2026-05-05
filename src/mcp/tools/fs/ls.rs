@@ -20,6 +20,7 @@ pub async fn ls(
     server: &CodepalServer,
     params: LsDirParams,
 ) -> Result<LsDirResult, rmcp::ErrorData> {
+    eprintln!("tool: ls(path={})", params.path);
     let path = server
         .path_check_allowed(params.path.into())
         .await
