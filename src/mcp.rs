@@ -420,6 +420,8 @@ impl ServerHandler for CodepalServer {
         let mut instr = String::new();
         instr.push_str(include_str!("mcp_instr.md"));
         instr.push('\n');
+        instr.push_str(include_str!("mcp_instr_memory.md"));
+        instr.push('\n');
         if self.prog_lang == ProgLanguage::Rust {
             instr.push_str(include_str!("mcp_instr_rust.md"));
             instr.push('\n');
