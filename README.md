@@ -73,6 +73,7 @@ These instructions are provided as system prompts to agents and define the tools
       "args": [
          "--workspace=${workspaceFolder}"
         ,"--enable-compressed"
+        ,"--enable-memory"
       ],
       "env": {}
     }
@@ -92,6 +93,7 @@ Create `.mcp.json` in the project root with the following content:
       "args": [
          "--workspace=."
         ,"--enable-compressed"
+        ,"--enable-memory"
       ],
       "env": {}
     }

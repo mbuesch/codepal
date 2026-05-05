@@ -25,6 +25,10 @@ pub struct Opts {
     #[arg(long, short = 'C')]
     pub enable_compressed: bool,
 
+    /// Enable long term project memory.
+    #[arg(long, short = 'M')]
+    pub enable_memory: bool,
+
     /// Dump memory store contents to stdout and exit.
     #[arg(long, short = 'D')]
     pub dump_memory: bool,

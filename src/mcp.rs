@@ -57,6 +57,7 @@ pub struct CodepalServer {
     workspace: PathBuf,
     read_path_allow_list: Vec<PathBuf>,
     enable_compressed: bool,
+    enable_memory: bool,
     prog_lang: ProgLanguage,
     mem_db_path: PathBuf,
     mem_db_conn: Arc<Mutex<Option<sql::Connection>>>,
@@ -102,16 +103,24 @@ impl CodepalServer {
             }
         }
 
+        let mut tool_router = Self::tool_router();
+        if !opts.enable_memory {
+            for name in ["mem_list", "mem_store", "mem_load", "mem_delete"] {
+                tool_router.map.remove(name);
+            }
+        }
+
         Ok(Self {
             workspace: workspace.clone(),
             read_path_allow_list,
             enable_compressed: opts.enable_compressed,
+            enable_memory: opts.enable_memory,
             prog_lang,
             mem_db_path: workspace.join(MEMORY_DB_FILENAME),
             mem_db_conn: Arc::new(Mutex::new(None)),
             mem_max_age_days: opts.memory_max_age_days,
             prompt_router: Self::prompt_router(),
-            tool_router: Self::tool_router(),
+            tool_router,
         })
     }
 
@@ -215,6 +224,7 @@ pub(crate) async fn make_test_server(workspace: &std::path::Path) -> CodepalServ
         read_path_allow_list: vec![],
         no_auto_path_allow: false,
         enable_compressed: false,
+        enable_memory: false,
         dump_memory: false,
         memory_max_age_days: None,
     };
@@ -420,8 +430,10 @@ impl ServerHandler for CodepalServer {
         let mut instr = String::new();
         instr.push_str(include_str!("mcp_instr.md"));
         instr.push('\n');
-        instr.push_str(include_str!("mcp_instr_memory.md"));
-        instr.push('\n');
+        if self.enable_memory {
+            instr.push_str(include_str!("mcp_instr_memory.md"));
+            instr.push('\n');
+        }
         if self.prog_lang == ProgLanguage::Rust {
             instr.push_str(include_str!("mcp_instr_rust.md"));
             instr.push('\n');

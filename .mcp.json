@@ -5,6 +5,7 @@
       "args": [
          "--workspace=."
         ,"--enable-compressed"
+        ,"--enable-memory"
       ],
       "env": {}
     }
