@@ -21,38 +21,42 @@ This reduces token usage.
 
 ## MCP Prompts
 
-`doit`
+### `doit`
 
 - Description: Execute arbitrary instructions with CodePal context.
 - Parameters: `instructions`: Instructions to execute.
 
-`security_audit`
+### `security_audit`
 
 - Description: Perform a security audit guided by CodePal.
 - Parameters: `what`: Artifact to audit.
 
-`find_bugs`
+### `find_bugs`
 
 - Description: Find bugs in the specified code or artifact.
 - Parameters: `what`: What to find bugs in.
 
-`find_performance_improvements`
+### `find_performance_improvements`
 
 - Description: Find performance improvements in the specified code or artifact.
 - Parameters: `what`: What to find performance improvements in.
 
-`refactor`
+### `refactor`
 
 - Description: Refactor the specified code or artifact.
 - Parameters: `what`: What to refactor.
 
 ## MCP Tools
 
+### `ls`
+
 `ls(path: string)`
 
 - List directory contents under *Allowed Paths*.
 - Parameters: `path`: Directory path to list.
 - Returns: directory listing.
+
+### `read`
 
 `read(path: string, start_line?: number, end_line?: number)`
 
@@ -62,6 +66,8 @@ This reduces token usage.
   - `start_line` (optional): First line to read, 1-based inclusive.
   - `end_line` (optional): Last line to read, 1-based inclusive.
 - Returns: File text (up to 256 KB).
+
+### `grep`
 
 `grep(path: string, pattern: string, case_insensitive?: bool, dot_matches_newline?: bool, context_lines?: number)`
 
@@ -78,6 +84,8 @@ This reduces token usage.
   - Separate match groups are delimited by `--` on its own line.
   - Empty string returned when no matches found.
 
+### `find`
+
 `find(path: string, pattern: string, case_insensitive?: bool)`
 
 - Find files matching a regex pattern in a directory tree under *Allowed Paths*.
@@ -87,11 +95,15 @@ This reduces token usage.
   - `case_insensitive` (optional): Enable case-insensitive matching (default: `true`).
 - Returns: List of matching absolute file paths (up to 10,000).
 
+### `mem_list`
+
 `mem_list()`
 
 - List all keys in the persistent memory store.
 - Returns: List of keys.
 - Only available when `--enable-memory` is active.
+
+### `mem_store`
 
 `mem_store(keys: string[], value: string)`
 
@@ -101,6 +113,8 @@ This reduces token usage.
   - `value`: value to store (max 64 KB).
 - Only available when `--enable-memory` is active.
 
+### `mem_load`
+
 `mem_load(keys: string[])`
 
 - Load a value from the memory store. Returns the value for the first key found.
@@ -108,6 +122,8 @@ This reduces token usage.
   - `keys`: keys to look up; the first match wins. Supports fuzzy/partial key matching when no exact match exists.
 - Returns: stored value, or `null` if not found.
 - Only available when `--enable-memory` is active.
+
+### `mem_delete`
 
 `mem_delete(keys: string[])`
 
@@ -117,7 +133,7 @@ This reduces token usage.
 - Returns: list of keys that were actually deleted.
 - Only available when `--enable-memory` is active.
 
-### Allowed paths
+## Allowed paths for tools
 
 - Only files under *Allowed Paths* may be read or listed.
 - The workspace root is always included in *Allowed Paths*.
@@ -133,8 +149,6 @@ See `codepal --help` for the full list of options.
 When `--enable-memory` is active, the memory store is persisted in a SQLite database named `.agents-codepal-memory.sqlite` in the workspace root.
 
 Use `--dump-memory` to inspect the stored keys and values from the command line without starting the server.
-
-Use `--memory-max-age-days` to automatically prune entries that have not been accessed within the given number of days. Pruning runs on each memory tool call.
 
 ## VS Code MCP client configuration
 
