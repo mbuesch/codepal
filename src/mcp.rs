@@ -215,6 +215,29 @@ impl CodepalServer {
     pub(crate) fn mem_max_age_days(&self) -> Option<u64> {
         self.mem_max_age_days
     }
+
+    fn resolve_prompt_vars(&self, text: &str, vars: &[(&str, &str)]) -> String {
+        let mut text = text.to_string();
+
+        if text.contains("$(ALLOWED_PATHS_LIST)") {
+            let allowed_paths_list = self
+                .read_path_allow_list
+                .iter()
+                .map(|p| format!("- {}", p.display()))
+                .collect::<Vec<_>>()
+                .join("\n");
+            text = text.replace("$(ALLOWED_PATHS_LIST)", &allowed_paths_list);
+        }
+
+        for (var, value) in vars {
+            let placeholder = format!("$({var})");
+            if text.contains(&placeholder) {
+                text = text.replace(&placeholder, value);
+            }
+        }
+
+        text
+    }
 }
 
 #[cfg(test)]
@@ -248,7 +271,7 @@ pub struct PromptSecAudit {
 #[derive(Deserialize, Serialize, JsonSchema)]
 pub struct PromptFindBugs {
     #[schemars(description = "What to find bugs in")]
-    pub what: String,
+    pub where_: String,
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
@@ -275,7 +298,10 @@ impl CodepalServer {
     #[prompt]
     pub async fn doit(&self, params: Parameters<PromptDoit>) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::Assistant,
+                self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+            ),
             PromptMessage::new_text(PromptMessageRole::User, params.0.instructions),
         ]
     }
@@ -284,10 +310,13 @@ impl CodepalServer {
     #[prompt]
     pub async fn security_audit(&self, params: Parameters<PromptSecAudit>) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::Assistant,
+                self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+            ),
             PromptMessage::new_text(
                 PromptMessageRole::User,
-                format!("{PROMPT_SECAUDIT}\n{}", params.0.what),
+                self.resolve_prompt_vars(PROMPT_SECAUDIT, &[("WHAT", &params.0.what)]),
             ),
         ]
     }
@@ -296,10 +325,13 @@ impl CodepalServer {
     #[prompt]
     pub async fn find_bugs(&self, params: Parameters<PromptFindBugs>) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::Assistant,
+                self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+            ),
             PromptMessage::new_text(
                 PromptMessageRole::User,
-                format!("{PROMPT_FINDBUGS}\n{}", params.0.what),
+                self.resolve_prompt_vars(PROMPT_FINDBUGS, &[("WHERE", &params.0.where_)]),
             ),
         ]
     }
@@ -311,10 +343,13 @@ impl CodepalServer {
         params: Parameters<PromptFindPerf>,
     ) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::Assistant,
+                self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+            ),
             PromptMessage::new_text(
                 PromptMessageRole::User,
-                format!("{PROMPT_FINDPERF}\n{}", params.0.what),
+                self.resolve_prompt_vars(PROMPT_FINDPERF, &[("WHAT", &params.0.what)]),
             ),
         ]
     }
@@ -323,10 +358,13 @@ impl CodepalServer {
     #[prompt]
     pub async fn refactor(&self, params: Parameters<PromptRefactor>) -> Vec<PromptMessage> {
         vec![
-            PromptMessage::new_text(PromptMessageRole::Assistant, PROMPT_PREFIX),
+            PromptMessage::new_text(
+                PromptMessageRole::Assistant,
+                self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+            ),
             PromptMessage::new_text(
                 PromptMessageRole::User,
-                format!("{PROMPT_REFACTOR}\n{}", params.0.what),
+                self.resolve_prompt_vars(PROMPT_REFACTOR, &[("WHAT", &params.0.what)]),
             ),
         ]
     }
@@ -420,18 +458,18 @@ impl ServerHandler for CodepalServer {
         let server_info = Implementation::new("CodePal", env!("CARGO_PKG_VERSION"));
 
         let mut instr = String::new();
-        instr.push_str(include_str!("mcp_instr.md"));
+        instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr.md"), &[]));
         instr.push('\n');
         if self.enable_memory {
-            instr.push_str(include_str!("mcp_instr_memory.md"));
+            instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr_memory.md"), &[]));
             instr.push('\n');
         }
         if self.prog_lang == ProgLanguage::Rust {
-            instr.push_str(include_str!("mcp_instr_rust.md"));
+            instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr_rust.md"), &[]));
             instr.push('\n');
         }
         if self.enable_compressed {
-            instr.push_str(include_str!("mcp_instr_compressed.md"));
+            instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr_compressed.md"), &[]));
             instr.push('\n');
         }
 

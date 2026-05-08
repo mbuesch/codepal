@@ -43,3 +43,4 @@ Your goal is to find code that could be rewritten to run faster or use less memo
 Write a detailed report to the file `PERF_HUNT_$DATE.md` where `$DATE` is the current date in `YYYY-MM-DD` format.
 
 Find performance improvement opportunities in:
+$(WHERE)

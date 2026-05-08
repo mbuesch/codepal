@@ -31,3 +31,4 @@ Do not run the software build, linters, or tests.
 Write a detailed report to the file `BUG_HUNT_$DATE.md` where `$DATE` is the current date in `YYYY-MM-DD` format.
 
 Find bugs in:
+$(WHERE)

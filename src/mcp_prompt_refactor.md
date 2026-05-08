@@ -25,3 +25,4 @@
 - Reduce redundancy: Eliminate code duplication, increase code reuse.
 
 Refactor:
+$(WHAT)

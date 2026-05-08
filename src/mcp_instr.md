@@ -20,6 +20,9 @@ Shell to tools map:
 | `grep`, `sed`, `cat` | `read` |
 | `find` | `find` |
 
+Tools `ls`, `read`, `grep`, `find` can access any file or subdirectory under the path prefixes:
+$(ALLOWED_PATHS_LIST)
+
 **MANDATORY TOOL RULES**:
 
 - **ALWAYS** prefer `codepal` **MANDATORY PRIMARY TOOL** over other tools.
