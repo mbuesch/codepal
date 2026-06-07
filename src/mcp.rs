@@ -229,6 +229,13 @@ impl CodepalServer {
             text = text.replace("$(ALLOWED_PATHS_LIST)", &allowed_paths_list);
         }
 
+        if self.enable_compressed && text.contains("$(ENABLE_COMPRESSION)") {
+            text = text.replace(
+                "$(ENABLE_COMPRESSION)",
+                " **MUST ALWAYS** use **ultra-compressed** communication.",
+            );
+        }
+
         for (var, value) in vars {
             let placeholder = format!("$({var})");
             if text.contains(&placeholder) {

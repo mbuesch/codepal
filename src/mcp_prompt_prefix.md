@@ -1,1 +1,1 @@
-You **MUST ALWAYS** read + adhere to `codepal` MCP instructions.
+You **MUST ALWAYS** read + adhere to `codepal` MCP instructions.$(ENABLE_COMPRESSION)
