@@ -28,7 +28,36 @@ For each finding:
 Do not report style issues, performance suggestions, or anything that is merely "could be better".
 Do not run the software build, linters, or tests.
 
-Write a detailed report to the file `BUG_HUNT_$DATE.md` where `$DATE` is the current date in `YYYY-MM-DD` format.
+Write a detailed report to the file `BUG_HUNT_YYY-MM-DD.md` where `YYYY-MM-DD` is the current date.
+Report format:
+
+```
+# Bug hunt report
+
+- Date: {YYYY-MM-DD}
+- Scanned files: {file list}
+
+## Finding {1}: {Brief summary}
+
+- Severity: {High, Medium, Low}
+- Files: {affected files}
+
+{Very detailed description}
+
+{Code snippets and code references relevant for understanding the finding}
+
+## Finding {2}: {Brief summary}
+
+...
+
+## Finding {n}: {Brief summary}
+
+...
+
+## Summary
+
+{Table with brief descriptions of the findings}
+```
 
 Find bugs in:
 $(WHERE)
