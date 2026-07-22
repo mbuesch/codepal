@@ -8,7 +8,7 @@ publish = false
 anyhow = "1"
 clap = { version = "4", features = [ "derive" ] }
 regex = "1"
-rmcp = { version = "1", features = [ "transport-io" ] }
+rmcp = { version = "2", features = [ "transport-io" ] }
 rusqlite = "0.40"
 schemars = "1"
 serde = { version = "1", features = [ "derive" ] }

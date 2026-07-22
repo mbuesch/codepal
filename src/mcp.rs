@@ -19,19 +19,13 @@ use crate::{
 };
 use anyhow::{self as ah, Context as _, format_err as err};
 use rmcp::{
-    RoleServer, ServerHandler,
+    ServerHandler,
     handler::server::{
         router::{prompt::PromptRouter, tool::ToolRouter},
         wrapper::{Json, Parameters},
     },
-    model::{
-        GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
-        PaginatedRequestParams, PromptMessage, PromptMessageRole, ProtocolVersion,
-        ServerCapabilities, ServerInfo,
-    },
-    prompt, prompt_handler, prompt_router,
-    service::RequestContext,
-    tool, tool_handler, tool_router,
+    model::{Implementation, PromptMessage, ProtocolVersion, Role, ServerCapabilities, ServerInfo},
+    prompt, prompt_handler, prompt_router, tool, tool_handler, tool_router,
 };
 use rusqlite::{self as sql};
 use schemars::JsonSchema;
@@ -310,10 +304,10 @@ impl CodepalServer {
     pub async fn doit(&self, params: Parameters<PromptDoit>) -> Vec<PromptMessage> {
         vec![
             PromptMessage::new_text(
-                PromptMessageRole::Assistant,
+                Role::Assistant,
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
             ),
-            PromptMessage::new_text(PromptMessageRole::User, params.0.instructions),
+            PromptMessage::new_text(Role::User, params.0.instructions),
         ]
     }
 
@@ -322,11 +316,11 @@ impl CodepalServer {
     pub async fn security_audit(&self, params: Parameters<PromptSecAudit>) -> Vec<PromptMessage> {
         vec![
             PromptMessage::new_text(
-                PromptMessageRole::Assistant,
+                Role::Assistant,
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
             ),
             PromptMessage::new_text(
-                PromptMessageRole::User,
+                Role::User,
                 self.resolve_prompt_vars(PROMPT_SECAUDIT, &[("WHAT", &params.0.what)]),
             ),
         ]
@@ -337,11 +331,11 @@ impl CodepalServer {
     pub async fn find_bugs(&self, params: Parameters<PromptFindBugs>) -> Vec<PromptMessage> {
         vec![
             PromptMessage::new_text(
-                PromptMessageRole::Assistant,
+                Role::Assistant,
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
             ),
             PromptMessage::new_text(
-                PromptMessageRole::User,
+                Role::User,
                 self.resolve_prompt_vars(PROMPT_FINDBUGS, &[("WHERE", &params.0.where_)]),
             ),
         ]
@@ -355,11 +349,11 @@ impl CodepalServer {
     ) -> Vec<PromptMessage> {
         vec![
             PromptMessage::new_text(
-                PromptMessageRole::Assistant,
+                Role::Assistant,
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
             ),
             PromptMessage::new_text(
-                PromptMessageRole::User,
+                Role::User,
                 self.resolve_prompt_vars(PROMPT_FINDPERF, &[("WHAT", &params.0.what)]),
             ),
         ]
@@ -370,11 +364,11 @@ impl CodepalServer {
     pub async fn refactor(&self, params: Parameters<PromptRefactor>) -> Vec<PromptMessage> {
         vec![
             PromptMessage::new_text(
-                PromptMessageRole::Assistant,
+                Role::Assistant,
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
             ),
             PromptMessage::new_text(
-                PromptMessageRole::User,
+                Role::User,
                 self.resolve_prompt_vars(PROMPT_REFACTOR, &[("WHAT", &params.0.what)]),
             ),
         ]
