@@ -14,7 +14,7 @@ More likely to `mem_store` if:
 - **ALWAYS** query `mem_list` and `mem_load` tools for relevant information before analyzing.
 - Store *useful* new insights about the project that are *worth remembering* with the `mem_store` tool.
 - **MUST** use short keys, *descriptive of the content*, but *not too specific*.
-- Stored values **MUST** be *short*/*compressed*.
+- Stored values **MUST** be *short*, *brief* and to the point.
 - **ALWAYS** update memory, if *code* or *documentation* is changed, to keep it up-to-date, using `mem_store` tool.
 - DELETE memory keys that are: Wrong, irrelevant, outdated, duplicate. Using `mem_delete` tool. You decide what/when to delete. No restriction.
 

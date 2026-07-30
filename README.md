@@ -10,14 +10,8 @@ These instructions are injected as system prompt context when agents connect.
 The active instruction set depends on which options are enabled:
 
 - **Base instructions**: Always included.
-- **Compressed comm instructions**: Included when `--enable-compressed` is active.
 - **Memory instructions**: Included when `--enable-memory` is active.
 - **Rust instructions**: Included automatically when a `Cargo.toml` is detected in the workspace.
-
-### Compressed AI communication mode
-
-When enabled with `--enable-compressed`, the server instructs agents to use a compressed communication format: filler words and redundant information are removed, keeping only essential data.
-This reduces token usage.
 
 ## MCP Prompts
 
@@ -162,7 +156,6 @@ Use `--dump-memory` to inspect the stored keys and values from the command line 
       "command": "/opt/codepal/bin/codepal",
       "args": [
          "--workspace=${workspaceFolder}"
-        ,"--enable-compressed"
         ,"--enable-memory"
       ],
       "env": {}
@@ -182,7 +175,6 @@ Create `.mcp.json` in the project root with the following content:
       "command": "/opt/codepal/bin/codepal",
       "args": [
          "--workspace=."
-        ,"--enable-compressed"
         ,"--enable-memory"
       ],
       "env": {}
@@ -197,10 +189,6 @@ Create `.mcp.json` in the project root with the following content:
 ./build.sh    # compile release binary
 ./install.sh  # install to /opt/codepal/bin/codepal
 ```
-
-## Acknowledgements
-
-Skill instructions derived from [caveman](https://github.com/juliusbrussee/caveman)
 
 ## License
 

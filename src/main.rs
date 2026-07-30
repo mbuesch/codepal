@@ -21,10 +21,6 @@ pub struct Opts {
     #[arg(long)]
     pub no_auto_path_allow: bool,
 
-    /// Enable compressed communication.
-    #[arg(long, short = 'C')]
-    pub enable_compressed: bool,
-
     /// Enable long term project memory.
     #[arg(long, short = 'M')]
     pub enable_memory: bool,

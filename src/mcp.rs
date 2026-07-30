@@ -50,7 +50,6 @@ pub struct CodepalServer {
     #[allow(dead_code)]
     workspace: PathBuf,
     read_path_allow_list: Vec<PathBuf>,
-    enable_compressed: bool,
     enable_memory: bool,
     prog_lang: ProgLanguage,
     mem_db_path: PathBuf,
@@ -107,7 +106,6 @@ impl CodepalServer {
         Ok(Self {
             workspace: workspace.clone(),
             read_path_allow_list,
-            enable_compressed: opts.enable_compressed,
             enable_memory: opts.enable_memory,
             prog_lang,
             mem_db_path: workspace.join(MEMORY_DB_FILENAME),
@@ -223,17 +221,6 @@ impl CodepalServer {
             text = text.replace("$(ALLOWED_PATHS_LIST)", &allowed_paths_list);
         }
 
-        if text.contains("$(ENABLE_COMPRESSION)") {
-            text = text.replace(
-                "$(ENABLE_COMPRESSION)",
-                if self.enable_compressed {
-                    " **MUST ALWAYS** use **ultra-compressed** communication."
-                } else {
-                    ""
-                },
-            );
-        }
-
         for (var, value) in vars {
             let placeholder = format!("$({var})");
             if text.contains(&placeholder) {
@@ -251,7 +238,6 @@ pub(crate) async fn make_test_server(workspace: &std::path::Path) -> CodepalServ
         workspace: workspace.to_path_buf(),
         read_path_allow_list: vec![],
         no_auto_path_allow: false,
-        enable_compressed: false,
         enable_memory: false,
         dump_memory: false,
         memory_max_age_days: None,
@@ -471,10 +457,6 @@ impl ServerHandler for CodepalServer {
         }
         if self.prog_lang == ProgLanguage::Rust {
             instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr_rust.md"), &[]));
-            instr.push('\n');
-        }
-        if self.enable_compressed {
-            instr.push_str(&self.resolve_prompt_vars(include_str!("mcp_instr_compressed.md"), &[]));
             instr.push('\n');
         }
 

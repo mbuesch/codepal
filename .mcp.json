@@ -4,7 +4,6 @@
       "command": "./target/debug/codepal",
       "args": [
          "--workspace=."
-        ,"--enable-compressed"
         ,"--enable-memory"
       ],
       "env": {}
