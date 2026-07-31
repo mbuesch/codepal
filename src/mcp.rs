@@ -288,43 +288,40 @@ impl CodepalServer {
     /// Prompt with CodePal instructions.
     #[prompt]
     pub async fn doit(&self, params: Parameters<PromptDoit>) -> Vec<PromptMessage> {
-        vec![
-            PromptMessage::new_text(
-                Role::Assistant,
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{}\n{}",
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
+                params.0.instructions
             ),
-            PromptMessage::new_text(Role::User, params.0.instructions),
-        ]
+        )]
     }
 
     /// Prompt to perform a security audit.
     #[prompt]
     pub async fn security_audit(&self, params: Parameters<PromptSecAudit>) -> Vec<PromptMessage> {
-        vec![
-            PromptMessage::new_text(
-                Role::Assistant,
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{}\n{}",
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
-            ),
-            PromptMessage::new_text(
-                Role::User,
                 self.resolve_prompt_vars(PROMPT_SECAUDIT, &[("WHAT", &params.0.what)]),
             ),
-        ]
+        )]
     }
 
     /// Prompt to find bugs.
     #[prompt]
     pub async fn find_bugs(&self, params: Parameters<PromptFindBugs>) -> Vec<PromptMessage> {
-        vec![
-            PromptMessage::new_text(
-                Role::Assistant,
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{}\n{}",
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
-            ),
-            PromptMessage::new_text(
-                Role::User,
                 self.resolve_prompt_vars(PROMPT_FINDBUGS, &[("WHERE", &params.0.where_)]),
             ),
-        ]
+        )]
     }
 
     /// Prompt to find performance improvements.
@@ -333,31 +330,27 @@ impl CodepalServer {
         &self,
         params: Parameters<PromptFindPerf>,
     ) -> Vec<PromptMessage> {
-        vec![
-            PromptMessage::new_text(
-                Role::Assistant,
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{}\n{}",
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
-            ),
-            PromptMessage::new_text(
-                Role::User,
                 self.resolve_prompt_vars(PROMPT_FINDPERF, &[("WHAT", &params.0.what)]),
             ),
-        ]
+        )]
     }
 
     /// Prompt to refactor code.
     #[prompt]
     pub async fn refactor(&self, params: Parameters<PromptRefactor>) -> Vec<PromptMessage> {
-        vec![
-            PromptMessage::new_text(
-                Role::Assistant,
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{}\n{}",
                 self.resolve_prompt_vars(PROMPT_PREFIX, &[]),
-            ),
-            PromptMessage::new_text(
-                Role::User,
                 self.resolve_prompt_vars(PROMPT_REFACTOR, &[("WHAT", &params.0.what)]),
             ),
-        ]
+        )]
     }
 }
 
