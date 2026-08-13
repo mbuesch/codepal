@@ -28,7 +28,7 @@ For each finding:
 Do not report style issues, performance suggestions, or anything that is merely "could be better".
 Do not run the software build, linters, or tests.
 
-Write a detailed report to the file `BUG_HUNT_YYY-MM-DD.md` where `YYYY-MM-DD` is the current date.
+Write a detailed report to the file `BUG_HUNT_YYYY-MM-DD_hh-mm-ss.md` where `YYYY-MM-DD_hh-mm-ss` is the current date and time.
 Report format:
 
 ```

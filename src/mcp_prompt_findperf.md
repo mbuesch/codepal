@@ -40,7 +40,7 @@ Your goal is to find code that could be rewritten to run faster or use less memo
   4. **Tradeoffs** (e.g. increased code complexity, hardware dependency, memory increase).
   5. **Severity** of the opportunity: low / medium / high.
 
-Write a detailed report to the file `PERF_HUNT_YYYY-MM-DD.md` where `YYYY-MM-DD` is the current date.
+Write a detailed report to the file `PERF_HUNT_YYYY-MM-DD_hh-mm-ss.md` where `YYYY-MM-DD_hh-mm-ss` is the current date and time.
 Report format:
 
 ```

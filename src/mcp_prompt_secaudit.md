@@ -19,7 +19,7 @@ Things that are considered to be critical security vulnerabilities include, but 
 Also assess existing security measures and identify areas for improvement.
 Do not run the software build, linters or tests.
 
-Write a detailed report to the file `SECURITY_AUDIT_YYYY-MM-DD.md` where `YYYY-MM-DD` is the current date.
+Write a detailed report to the file `SECURITY_AUDIT_YYYY-MM-DD_hh-mm-ss.md` where `YYYY-MM-DD_hh-mm-ss` is the current date and time.
 Report format:
 
 ```
