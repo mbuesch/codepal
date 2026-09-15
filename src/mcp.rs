@@ -24,7 +24,9 @@ use rmcp::{
         router::{prompt::PromptRouter, tool::ToolRouter},
         wrapper::{Json, Parameters},
     },
-    model::{Implementation, PromptMessage, ProtocolVersion, Role, ServerCapabilities, ServerInfo},
+    model::{
+        Implementation, PromptMessage, ProtocolVersion, Role, ServerCapabilities, ServerConfig,
+    },
     prompt, prompt_handler, prompt_router, tool, tool_handler, tool_router,
 };
 use rusqlite::{self as sql};
@@ -433,7 +435,7 @@ impl CodepalServer {
 #[prompt_handler(router = self.prompt_router)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for CodepalServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let server_capabilities = ServerCapabilities::builder()
             .enable_prompts()
             .enable_tools()
@@ -453,7 +455,7 @@ impl ServerHandler for CodepalServer {
             instr.push('\n');
         }
 
-        ServerInfo::new(server_capabilities)
+        ServerConfig::new(server_capabilities)
             .with_server_info(server_info)
             .with_protocol_version(ProtocolVersion::LATEST)
             .with_instructions(instr)
