@@ -1,4 +1,4 @@
-`codepal` is a coding assistant MCP server.
+`codepal` is an MCP server for software development.
 
 # `codepal` tools
 
