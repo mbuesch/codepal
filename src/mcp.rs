@@ -223,6 +223,13 @@ impl CodepalServer {
             text = text.replace("$(ALLOWED_PATHS_LIST)", &allowed_paths_list);
         }
 
+        if self.enable_memory && text.contains("$(INSTR_MEM_TOOLS)") {
+            text = text.replace(
+                "$(INSTR_MEM_TOOLS)",
+                include_str!("mcp_instr_memory_tools.md"),
+            );
+        }
+
         for (var, value) in vars {
             let placeholder = format!("$({var})");
             if text.contains(&placeholder) {

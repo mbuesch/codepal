@@ -1,0 +1,4 @@
+- `mem_list`: List all keys in the memory store
+- `mem_store`: Store a value in the key-value memory store
+- `mem_load`: Load a value from the key-value memory store
+- `mem_delete`: Delete a key from the memory store
