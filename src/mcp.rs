@@ -39,6 +39,8 @@ use std::{
 
 mod tools;
 
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V_2025_11_25;
+
 /// Detected programming language of the project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ProgLanguage {
@@ -464,7 +466,7 @@ impl ServerHandler for CodepalServer {
 
         ServerConfig::new(server_capabilities)
             .with_server_info(server_info)
-            .with_protocol_version(ProtocolVersion::LATEST)
+            .with_protocol_version(PROTOCOL_VERSION)
             .with_instructions(instr)
     }
 }
